@@ -1,5 +1,5 @@
 <?php
-// index.php
+// index.phppppppp
 require 'includes/functions.php';
 
 if (isLoggedIn()) {
