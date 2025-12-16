@@ -42,12 +42,11 @@ include '../includes/header.php';
 
         <div class="export-options">
             <h3>Options d'export</h3>
-            <form id="exportForm" method="POST" action="/Taskly/api/export_tasks.php">
+            <form id="exportForm" method="POST" action="/taskly_v1/api/export_tasks.php">
                 <div class="form-group">
                     <label for="export_format">Format</label>
                     <select name="format" id="export_format" class="form-control">
-                        <option value="xlsx">Excel (.xlsx)</option>
-                        <option value="csv">CSV (.csv)</option>
+                        <option value="csv">Excel / CSV (Compatible)</option>
                     </select>
                 </div>
 

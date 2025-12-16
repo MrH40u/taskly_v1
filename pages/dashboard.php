@@ -32,6 +32,11 @@ if ($role === 'admin') {
 }
 $tasks = $stmt->fetchAll();
 
+
+// Include Chart.js
+echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
+echo '<script src="../assets/js/dashboard_charts.js" defer></script>';
+
 include '../includes/header.php';
 ?>
 
@@ -74,6 +79,33 @@ include '../includes/header.php';
         <div class="stat-info">
             <h3><?php echo $doneTasks; ?></h3>
             <p>Terminées</p>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+    <!-- Status Distribution -->
+    <div class="card" style="padding: 1.5rem; height: 320px;">
+        <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--text-secondary);">Répartition par Statut</h3>
+        <div style="position: relative; height: 250px;">
+            <canvas id="statusChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Project Breakdown -->
+    <div class="card" style="padding: 1.5rem; height: 320px;">
+        <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--text-secondary);">Tâches par Projet (Top 5)</h3>
+        <div style="position: relative; height: 250px;">
+            <canvas id="projectChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Priority Breakdown -->
+    <div class="card" style="padding: 1.5rem; height: 320px;">
+        <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--text-secondary);">Répartition par Priorité</h3>
+        <div style="position: relative; height: 250px;">
+            <canvas id="priorityChart"></canvas>
         </div>
     </div>
 </div>

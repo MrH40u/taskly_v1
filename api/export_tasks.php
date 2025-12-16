@@ -53,125 +53,35 @@ function translatePriority($priority)
 // Generate filename
 $filename = 'taches_export_' . date('Y-m-d_His');
 
-if ($format === 'xlsx') {
-    // Native Excel Export (HTML Table method - widely supported by Excel)
-    $filename .= '.xls';
+// CSV Export (Safe for Excel, no warnings)
+$ending = $format === 'csv' ? '.csv' : '.csv'; // Force .csv extension even if xlsx requested to ensure correct opening
+$filename .= $ending;
 
-    header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    header('Pragma: no-cache');
-    header('Expires: 0');
+header('Content-Type: text/csv; charset=UTF-8');
+header('Content-Disposition: attachment; filename="' . $filename . '"');
+header('Pragma: no-cache');
+header('Expires: 0');
 
-    echo "\xEF\xBB\xBF"; // UTF-8 BOM
-    ?>
-    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"
-        xmlns="http://www.w3.org/TR/REC-html40">
+$output = fopen('php://output', 'w');
+fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF)); // UTF-8 BOM for Excel
 
-    <head>
-        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-        <!--[if gte mso 9]>
-        <xml>
-            <x:ExcelWorkbook>
-                <x:ExcelWorksheets>
-                    <x:ExcelWorksheet>
-                        <x:Name>Tâches</x:Name>
-                        <x:WorksheetOptions>
-                            <x:DisplayGridlines/>
-                        </x:WorksheetOptions>
-                    </x:ExcelWorksheet>
-                </x:ExcelWorksheets>
-            </x:ExcelWorkbook>
-        </xml>
-        <![endif]-->
-        <style>
-            table {
-                border-collapse: collapse;
-                width: 100%;
-            }
+// Header
+fputcsv($output, ['ID', 'Titre', 'Description', 'Priorité', 'Statut', 'Assigné à', 'Projet', 'Date limite', 'Date création'], ';');
 
-            th,
-            td {
-                border: 1px solid #000000;
-                padding: 5px;
-                text-align: left;
-                vertical-align: top;
-            }
-
-            th {
-                background-color: #6366F1;
-                color: #FFFFFF;
-                font-weight: bold;
-            }
-        </style>
-    </head>
-
-    <body>
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Titre</th>
-                    <th>Description</th>
-                    <th>Priorité</th>
-                    <th>Statut</th>
-                    <th>Assigné à</th>
-                    <th>Projet</th>
-                    <th>Date limite</th>
-                    <th>Date création</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($tasks as $task): ?>
-                    <tr>
-                        <td><?php echo $task['id']; ?></td>
-                        <td><?php echo htmlspecialchars($task['title']); ?></td>
-                        <td><?php echo htmlspecialchars($task['description']); ?></td>
-                        <td><?php echo translatePriority($task['priority']); ?></td>
-                        <td><?php echo translateStatus($task['status']); ?></td>
-                        <td><?php echo htmlspecialchars($task['assigned_user'] ?? 'Non assigné'); ?></td>
-                        <td><?php echo htmlspecialchars($task['project_name'] ?? ''); ?></td>
-                        <td><?php echo $task['due_date'] ?? '-'; ?></td>
-                        <td><?php echo $task['created_at']; ?></td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    </body>
-
-    </html>
-    <?php
-    exit;
-
-} else {
-    // CSV Export
-    $filename .= '.csv';
-
-    header('Content-Type: text/csv; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    header('Pragma: no-cache');
-    header('Expires: 0');
-
-    $output = fopen('php://output', 'w');
-    fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF)); // UTF-8 BOM
-
-    // Header
-    fputcsv($output, ['ID', 'Titre', 'Description', 'Priorité', 'Statut', 'Assigné à', 'Projet', 'Date limite', 'Date création'], ';');
-
-    // Rows
-    foreach ($tasks as $task) {
-        fputcsv($output, [
-            $task['id'],
-            $task['title'],
-            $task['description'],
-            translatePriority($task['priority']),
-            translateStatus($task['status']),
-            $task['assigned_user'] ?? 'Non assigné',
-            $task['project_name'] ?? '',
-            $task['due_date'] ?? '-',
-            $task['created_at']
-        ], ';');
-    }
-
-    fclose($output);
-    exit;
+// Rows
+foreach ($tasks as $task) {
+    fputcsv($output, [
+        $task['id'],
+        $task['title'],
+        $task['description'],
+        translatePriority($task['priority']),
+        translateStatus($task['status']),
+        $task['assigned_user'] ?? 'Non assigné',
+        $task['project_name'] ?? '',
+        $task['due_date'] ?? '-',
+        $task['created_at']
+    ], ';');
 }
+
+fclose($output);
+exit;

@@ -32,13 +32,14 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <span>Dashboard</span>
                 </a>
 
+
                 <a href="/taskly_v1/pages/tasks.php"
                     class="nav-item <?php echo $current_page == 'tasks.php' ? 'active' : ''; ?>">
                     <i class="fas fa-clipboard-list"></i>
                     <span>Gestion des Tâches</span>
                 </a>
 
-                <a href="/Taskly/pages/import_export.php"
+                <a href="/taskly_v1/pages/import_export.php"
                     class="nav-item <?php echo $current_page == 'import_export.php' ? 'active' : ''; ?>">
                     <i class="fas fa-file-export"></i>
                     <span>Import | Export</span>
@@ -103,10 +104,16 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <div class="header-right">
                 <?php if (isset($_SESSION['user_id'])): ?>
                     <!-- Notifications -->
-                    <div class="header-icon notification-icon">
+                    <?php
+                        // Fetch unread notifications
+                        $unreadCount = getUnreadNotificationCount($pdo, $_SESSION['user_id']);
+                    ?>
+                    <a href="/taskly_v1/pages/notifications.php" class="header-icon notification-icon" style="text-decoration: none;">
                         <i class="fas fa-bell"></i>
-                        <span class="notification-badge">3</span>
-                    </div>
+                        <?php if ($unreadCount > 0): ?>
+                            <span class="notification-badge"><?php echo $unreadCount > 9 ? '9+' : $unreadCount; ?></span>
+                        <?php endif; ?>
+                    </a>
 
                     <!-- User Info -->
                     <div class="user-info">

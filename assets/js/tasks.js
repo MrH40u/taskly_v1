@@ -151,6 +151,17 @@ function openEditModal(taskId) {
                     document.getElementById('edit_priority').value = task.priority;
                     document.getElementById('edit_due_date').value = task.due_date || '';
                     document.getElementById('edit_assigned_to').value = task.assigned_to || '';
+
+                    // Reset checkboxes
+                    document.querySelectorAll('.edit-tag-checkbox').forEach(cb => cb.checked = false);
+                    // Check assigned tags
+                    if (task.tags && task.tags.length > 0) {
+                        task.tags.forEach(tagId => {
+                            const cb = document.querySelector(`.edit-tag-checkbox[value="${tagId}"]`);
+                            if (cb) cb.checked = true;
+                        });
+                    }
+
                     modal.classList.add('active');
                 }
             } else {
@@ -219,6 +230,31 @@ function openViewModal(taskId) {
                     document.getElementById('view_title').textContent = task.title;
                     document.getElementById('view_description').textContent = task.description || 'Aucune description';
 
+                    document.getElementById('view_description').textContent = task.description || 'Aucune description';
+
+                    // Tags
+                    const tagsContainer = document.getElementById('view_tags_container');
+                    if (tagsContainer) {
+                        tagsContainer.innerHTML = '';
+                        if (task.task_tags_info) {
+                            const tags = task.task_tags_info.split('|');
+                            tags.forEach(tagStr => {
+                                const [tagName, tagColor] = tagStr.split(':');
+                                const span = document.createElement('span');
+                                span.className = `badge`;
+                                span.style.backgroundColor = tagColor; // This expects tagColor to be a valid CSS color name or hex
+                                span.style.color = 'white';
+                                span.style.fontSize = '0.75rem';
+                                span.style.borderRadius = '12px';
+                                span.style.padding = '2px 8px';
+                                span.textContent = tagName;
+                                tagsContainer.appendChild(span);
+                            });
+                        } else {
+                            tagsContainer.textContent = '-';
+                        }
+                    }
+
                     // Status badge
                     const statusLabels = { 'todo': 'À faire', 'in_progress': 'En cours', 'review': 'En revue', 'done': 'Terminé' };
                     const statusEl = document.getElementById('view_status');
@@ -245,6 +281,28 @@ function openViewModal(taskId) {
                         document.getElementById('view_duration').textContent = durationText;
                     } else {
                         document.getElementById('view_duration').textContent = '-';
+                    }
+
+                    // Attachments
+                    const attContainer = document.getElementById('view_attachments');
+                    if (attContainer) {
+                        attContainer.innerHTML = ''; // Clear previous
+                        if (task.attachments && task.attachments.length > 0) {
+                            task.attachments.forEach(file => {
+                                const link = document.createElement('a');
+                                link.href = file.file_path; // Relative path from DB
+                                link.target = '_blank';
+                                link.className = 'attachment-link';
+                                link.innerHTML = '<i class="fas fa-paperclip"></i> ' + file.filename;
+                                link.style.display = 'block';
+                                link.style.marginBottom = '0.5rem';
+                                link.style.textDecoration = 'none';
+                                link.style.color = 'var(--primary)';
+                                attContainer.appendChild(link);
+                            });
+                        } else {
+                            attContainer.innerHTML = '<span style="color: var(--text-muted); font-style: italic;">Aucune pièce jointe</span>';
+                        }
                     }
 
                     modal.classList.add('active');
