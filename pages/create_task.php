@@ -2,6 +2,7 @@
 // pages/create_task.php
 require '../config/db.php';
 require '../includes/functions.php';
+require '../includes/csrf.php';
 
 requireAdmin();
 
@@ -12,23 +13,28 @@ $stmt = $pdo->query("SELECT id, username FROM users WHERE role = 'dev'");
 $developers = $stmt->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $title = cleanInput($_POST['title']);
-    $description = cleanInput($_POST['description']);
-    $priority = $_POST['priority'];
-    $assigned_to = $_POST['assigned_to'] ?: null;
-    $due_date = $_POST['due_date'];
-
-    if (empty($title)) {
-        $error = "Le titre est requis.";
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        $error = "Token de sécurité invalide.";
     } else {
-        try {
-            $sql = "INSERT INTO tasks (title, description, priority, assigned_to, created_by, due_date) VALUES (?, ?, ?, ?, ?, ?)";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([$title, $description, $priority, $assigned_to, $_SESSION['user_id'], $due_date]);
-            $success = "Tâche créée avec succès !";
-            header("refresh:1;url=dashboard.php");
-        } catch (PDOException $e) {
-            $error = "Erreur: " . $e->getMessage();
+        $title = cleanInput($_POST['title']);
+        $description = cleanInput($_POST['description']);
+        $priority = $_POST['priority'];
+        $assigned_to = $_POST['assigned_to'] ?: null;
+        $due_date = $_POST['due_date'];
+
+        if (empty($title)) {
+            $error = "Le titre est requis.";
+        } else {
+            try {
+                $sql = "INSERT INTO tasks (title, description, priority, assigned_to, created_by, due_date) VALUES (?, ?, ?, ?, ?, ?)";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([$title, $description, $priority, $assigned_to, $_SESSION['user_id'], $due_date]);
+                $success = "Tâche créée avec succès !";
+                header("refresh:1;url=dashboard.php");
+            } catch (PDOException $e) {
+                $error = "Erreur: " . $e->getMessage();
+            }
         }
     }
 }
@@ -45,6 +51,7 @@ include '../includes/header.php';
         <div class="alert alert-success"><?php echo $success; ?></div> <?php endif; ?>
 
     <form method="POST" action="">
+        <?php echo csrfField(); ?>
         <div class="form-group">
             <label>Titre</label>
             <input type="text" name="title" class="form-control" placeholder="Titre de la tâche" required>

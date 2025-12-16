@@ -12,6 +12,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <link rel="stylesheet" href="/taskly_v1/assets/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="/taskly_v1/assets/main.js" defer></script>
 </head>
 
 <body class="app-layout">

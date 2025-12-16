@@ -2,6 +2,7 @@
 // pages/edit_task.php
 require '../config/db.php';
 require '../includes/functions.php';
+require '../includes/csrf.php';
 
 requireLogin();
 
@@ -41,8 +42,10 @@ $error = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Block modification if task is completed
-    if ($isCompleted) {
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        $error = "Token de sécurité invalide.";
+    } elseif ($isCompleted) {
         $error = "Cette tâche est terminée et ne peut plus être modifiée.";
     } else {
         $status = $_POST['status'];
@@ -124,6 +127,7 @@ include '../includes/header.php';
     <?php else: ?>
         <!-- Editable form for non-completed tasks -->
         <form method="POST" action="">
+            <?php echo csrfField(); ?>
             <?php if ($is_admin): ?>
                 <div class="form-group">
                     <label>Titre *</label>
