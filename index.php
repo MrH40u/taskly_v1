@@ -1,11 +1,11 @@
 <?php
-// index.phppppppp
+// index.php
 require 'includes/functions.php';
 
 if (isLoggedIn()) {
-    header("Location: /Taskly/pages/dashboard.php");
+    header("Location: /taskly_v1/pages/dashboard.php");
 } else {
-    header("Location: /Taskly/auth/login.php");
+    header("Location: /taskly_v1/auth/login.php");
 }
 exit;
 ?>

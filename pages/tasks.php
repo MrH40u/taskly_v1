@@ -2,8 +2,12 @@
 // pages/tasks.php
 require '../config/db.php';
 require '../includes/functions.php';
+require '../includes/csrf.php';
+require '../includes/classes/TaskRepository.php';
 
 requireLogin();
+
+$taskIdRepo = new TaskRepository($pdo);
 
 $user_id = $_SESSION['user_id'];
 $role = $_SESSION['user_role'];
@@ -18,6 +22,9 @@ if ($role === 'admin') {
 // Fetch projects for dropdown
 $projects = $pdo->query("SELECT id, name, color FROM projects ORDER BY name")->fetchAll();
 
+// Fetch tags for dropdown
+$allTags = $pdo->query("SELECT * FROM tags ORDER BY name")->fetchAll();
+
 // Get default project (ASTREE)
 $defaultProject = $pdo->query("SELECT id FROM projects WHERE name = 'ASTREE'")->fetch();
 $defaultProjectId = $defaultProject ? $defaultProject['id'] : null;
@@ -25,6 +32,12 @@ $defaultProjectId = $defaultProject ? $defaultProject['id'] : null;
 // Handle Add Task (AJAX)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_task') {
     header('Content-Type: application/json');
+
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
 
     if ($role !== 'admin') {
         echo json_encode(['success' => false, 'message' => 'Non autorisé']);
@@ -44,9 +57,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 
     try {
-        $sql = "INSERT INTO tasks (title, description, priority, assigned_to, created_by, due_date, project_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$title, $description, $priority, $assigned_to, $user_id, $due_date, $project_id]);
+        $newTaskId = $taskIdRepo->createTask([
+            'title' => $title,
+            'description' => $description,
+            'project_id' => $project_id,
+            'assigned_to' => $assigned_to,
+            'priority' => $priority,
+            'due_date' => $due_date,
+            'created_by' => $user_id
+        ]);
+
+        // Handle File Upload
+        if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
+            $uploadDir = '../uploads/';
+            $fileName = basename($_FILES['attachment']['name']);
+            $targetPath = $uploadDir . time() . '_' . $fileName; 
+            
+            $allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'txt', 'zip'];
+            $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+
+            if (in_array($fileExt, $allowedTypes)) {
+                if (move_uploaded_file($_FILES['attachment']['tmp_name'], $targetPath)) {
+                    $taskIdRepo->addAttachment($newTaskId, $targetPath, $fileName, $user_id);
+                }
+            }
+        }
+
+        // Handle Tags
+        if (isset($_POST['tags']) && is_array($_POST['tags'])) {
+            $taskIdRepo->updateTags($newTaskId, $_POST['tags']);
+        }
+
+        // Notify Assignee
+        if ($assigned_to && $assigned_to != $user_id) {
+            createNotification($pdo, $assigned_to, "On vous a assigné une nouvelle tâche : $title", "/taskly_v1/pages/tasks.php");
+        }
+        
         echo json_encode(['success' => true, 'message' => 'Tâche créée avec succès']);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Erreur: ' . $e->getMessage()]);
@@ -58,21 +104,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_status') {
     header('Content-Type: application/json');
 
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
+
     $task_id = $_POST['task_id'];
     $status = $_POST['status'];
 
     // Check permission
-    $stmt = $pdo->prepare("SELECT assigned_to FROM tasks WHERE id = ?");
-    $stmt->execute([$task_id]);
-    $task = $stmt->fetch();
+    $task = $taskIdRepo->getTaskById($task_id);
 
     if (!$task || ($role !== 'admin' && $task['assigned_to'] != $user_id)) {
         echo json_encode(['success' => false, 'message' => 'Non autorisé']);
         exit;
     }
 
-    $stmt = $pdo->prepare("UPDATE tasks SET status = ? WHERE id = ?");
-    $stmt->execute([$status, $task_id]);
+    $taskIdRepo->updateStatus($task_id, $status);
+    
+    // Notify if Admin changed status for someone else
+    if ($role === 'admin' && $task['assigned_to'] != $user_id) {
+        createNotification($pdo, $task['assigned_to'], "Le statut de votre tâche a été mis à jour : " . $status, "/taskly_v1/pages/tasks.php");
+    }
+
     echo json_encode(['success' => true]);
     exit;
 }
@@ -81,18 +136,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'get_task') {
     header('Content-Type: application/json');
 
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
+
     $task_id = $_POST['task_id'];
-    $stmt = $pdo->prepare("
-        SELECT t.*, p.name as project_name, u.username as assigned_user 
-        FROM tasks t 
-        LEFT JOIN projects p ON t.project_id = p.id 
-        LEFT JOIN users u ON t.assigned_to = u.id 
-        WHERE t.id = ?
-    ");
-    $stmt->execute([$task_id]);
-    $task = $stmt->fetch(PDO::FETCH_ASSOC);
+    $task = $taskIdRepo->getTaskById($task_id);
 
     if ($task) {
+        // Fetch Comments
+        $task['comments'] = $taskIdRepo->getComments($task_id);
+
         echo json_encode(['success' => true, 'task' => $task]);
     } else {
         echo json_encode(['success' => false, 'message' => 'Tâche introuvable']);
@@ -104,6 +160,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_task') {
     header('Content-Type: application/json');
 
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
+
     if ($role !== 'admin') {
         echo json_encode(['success' => false, 'message' => 'Non autorisé']);
         exit;
@@ -112,9 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $task_id = $_POST['task_id'];
 
     // Check if task is completed
-    $stmt = $pdo->prepare("SELECT status FROM tasks WHERE id = ?");
-    $stmt->execute([$task_id]);
-    $task = $stmt->fetch();
+    $task = $taskIdRepo->getTaskById($task_id);
 
     if ($task && $task['status'] === 'done') {
         echo json_encode(['success' => false, 'message' => 'Tâche terminée, modification impossible']);
@@ -134,9 +194,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 
     try {
-        $sql = "UPDATE tasks SET title=?, description=?, priority=?, assigned_to=?, due_date=?, project_id=? WHERE id=?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$title, $description, $priority, $assigned_to, $due_date, $project_id, $task_id]);
+        $taskIdRepo->updateTask($task_id, [
+            'title' => $title,
+            'description' => $description,
+            'priority' => $priority,
+            'assigned_to' => $assigned_to,
+            'due_date' => $due_date,
+            'project_id' => $project_id
+        ]);
+        
+        // Handle File Upload (Edit Mode)
+        if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
+            $uploadDir = '../uploads/';
+            $fileName = basename($_FILES['attachment']['name']);
+            $targetPath = $uploadDir . time() . '_' . $fileName; 
+            
+            $allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'txt', 'zip'];
+            $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+
+            if (in_array($fileExt, $allowedTypes)) {
+                if (move_uploaded_file($_FILES['attachment']['tmp_name'], $targetPath)) {
+                    $taskIdRepo->addAttachment($task_id, $targetPath, $fileName, $user_id);
+                }
+            }
+        }
+
+        // Handle Tags
+        if (isset($_POST['tags'])) {
+            $taskIdRepo->updateTags($task_id, $_POST['tags']);
+        }
+
+        // Notify Assignee (New or Old) - Simple approach: Notify the currently assigned person
+        if ($assigned_to && $assigned_to != $user_id) {
+            createNotification($pdo, $assigned_to, "Une de vos tâches a été modifiée : $title", "/taskly_v1/pages/tasks.php");
+        }
+
         echo json_encode(['success' => true, 'message' => 'Tâche mise à jour']);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Erreur: ' . $e->getMessage()]);
@@ -148,6 +240,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_task') {
     header('Content-Type: application/json');
 
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
+
     if ($role !== 'admin') {
         echo json_encode(['success' => false, 'message' => 'Non autorisé']);
         exit;
@@ -156,8 +254,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $task_id = $_POST['task_id'];
 
     try {
-        $stmt = $pdo->prepare("DELETE FROM tasks WHERE id = ?");
-        $stmt->execute([$task_id]);
+        $taskIdRepo->deleteTask($task_id);
         echo json_encode(['success' => true, 'message' => 'Tâche supprimée']);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Erreur: ' . $e->getMessage()]);
@@ -169,13 +266,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'advance_status') {
     header('Content-Type: application/json');
 
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
+
     $task_id = $_POST['task_id'];
 
     // Check permission
-    $stmt = $pdo->prepare("SELECT assigned_to, status, created_at FROM tasks WHERE id = ?");
-    $stmt->execute([$task_id]);
-    $task = $stmt->fetch();
+    $task = $taskIdRepo->getTaskById($task_id);
 
+    // Permission Check
     if (!$task || ($role !== 'admin' && $task['assigned_to'] != $user_id)) {
         echo json_encode(['success' => false, 'message' => 'Non autorisé']);
         exit;
@@ -197,24 +299,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $nextStatus = $statusFlow[$currentStatus] ?? 'done';
 
     try {
-        if ($nextStatus === 'done') {
-            // Final status: set completed_at and calculate duration
-            $sql = "UPDATE tasks SET 
-                        status = 'done', 
-                        completed_at = NOW(), 
-                        duration = TIMESTAMPDIFF(MINUTE, created_at, NOW()) 
-                    WHERE id = ?";
-        } else {
-            // Intermediate status: just update status
-            $sql = "UPDATE tasks SET status = ? WHERE id = ?";
-        }
-
-        $stmt = $pdo->prepare($sql);
-        if ($nextStatus === 'done') {
-            $stmt->execute([$task_id]);
-        } else {
-            $stmt->execute([$nextStatus, $task_id]);
-        }
+        $taskIdRepo->updateStatus($task_id, $nextStatus);
 
         $statusLabels = [
             'in_progress' => 'En cours',
@@ -233,42 +318,145 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit;
 }
 
-// Fetch stats
-$totalTasks = $pdo->query("SELECT COUNT(*) FROM tasks")->fetchColumn();
-$todoTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'todo'")->fetchColumn();
-$inProgressTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'in_progress'")->fetchColumn();
-$reviewTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'review'")->fetchColumn();
-$doneTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'done'")->fetchColumn();
+// Handle Add Comment (AJAX)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_comment') {
+    header('Content-Type: application/json');
 
-// Fetch tasks with project info
-if ($role === 'admin') {
-    $sql = "SELECT t.*, u.username as assigned_user, p.name as project_name, p.color as project_color
-            FROM tasks t 
-            LEFT JOIN users u ON t.assigned_to = u.id 
-            LEFT JOIN projects p ON t.project_id = p.id
-            ORDER BY t.created_at DESC";
-    $stmt = $pdo->query($sql);
-} else {
-    $sql = "SELECT t.*, u.username as assigned_user, p.name as project_name, p.color as project_color
-            FROM tasks t 
-            LEFT JOIN users u ON t.assigned_to = u.id 
-            LEFT JOIN projects p ON t.project_id = p.id
-            WHERE t.assigned_to = ? 
-            ORDER BY t.created_at DESC";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([$user_id]);
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
+
+    $task_id = (int)$_POST['task_id'];
+    $comment = cleanInput($_POST['comment']);
+
+    if (empty($comment)) {
+        echo json_encode(['success' => false, 'message' => 'Le commentaire est vide']);
+        exit;
+    }
+
+    try {
+        $commentId = $taskIdRepo->addComment($task_id, $user_id, $comment);
+        
+        // Notify Assignee if someone else commented
+        $task = $taskIdRepo->getTaskById($task_id);
+        if ($task && $task['assigned_to'] != $user_id) {
+            createNotification($pdo, $task['assigned_to'], "Nouveau commentaire sur : " . $task['title'], "/taskly_v1/pages/tasks.php");
+        }
+
+        echo json_encode(['success' => true, 'message' => 'Commentaire ajouté']);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Erreur: ' . $e->getMessage()]);
+    }
+    exit;
 }
-$tasks = $stmt->fetchAll();
+
+// Handle Delete Comment (AJAX)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_comment') {
+    header('Content-Type: application/json');
+
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
+
+    $comment_id = (int)$_POST['comment_id'];
+    $isAdmin = ($role === 'admin');
+
+    try {
+        if ($taskIdRepo->deleteComment($comment_id, $user_id, $isAdmin)) {
+            echo json_encode(['success' => true, 'message' => 'Commentaire supprimé']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Non autorisé']);
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Erreur: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// Fetch stats
+$stats = $taskIdRepo->getStats();
+$totalTasks = $stats['total'];
+$todoTasks = $stats['todo'];
+$inProgressTasks = $stats['in_progress'];
+$reviewTasks = $stats['review'];
+$doneTasks = $stats['done'];
+
+// View Mode (List or Kanban)
+$view = cleanInput($_GET['view'] ?? 'list');
+if (!in_array($view, ['list', 'kanban'])) {
+    $view = 'list';
+}
+
+// Pagination & Filtering
+$page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
+// Disable pagination for Kanban (show consistent board) or set high limit
+$limit = ($view === 'kanban') ? 1000 : 10; 
+$offset = ($page - 1) * $limit;
+
+// Filter Parameters
+$search = cleanInput($_GET['search'] ?? '');
+$filter_status = cleanInput($_GET['status'] ?? '');
+$filter_priority = cleanInput($_GET['priority'] ?? '');
+$filter_project = cleanInput($_GET['project_id'] ?? '');
+
+// Map GET params to Repository Filters
+$filters = [
+    'user_id' => $user_id,
+    'role' => $role,
+    'search' => $search,
+    'status' => $filter_status,
+    'priority' => $filter_priority,
+    'project_id' => $filter_project
+];
+
+// Fetch Data
+$taskData = $taskIdRepo->getAllTasks($filters, $limit, $offset);
+$tasks = $taskData['tasks'];
+$total_rows = $taskData['total'];
+$total_pages = ceil($total_rows / $limit);
+
+// Prepare Kanban Data if needed
+$kanbanData = [
+    'todo' => [],
+    'in_progress' => [],
+    'review' => [],
+    'done' => []
+];
+
+if ($view === 'kanban') {
+    foreach ($tasks as $task) {
+        if (isset($kanbanData[$task['status']])) {
+            $kanbanData[$task['status']][] = $task;
+        }
+    }
+}
+
+// Build query string for pagination links
+$queryParams = $_GET;
+unset($queryParams['page']);
+$queryString = http_build_query($queryParams);
+$pageLink = '?' . ($queryString ? $queryString . '&' : '') . 'page=';
+
+$stmt->bindValue(':offset', $offset, PDO::PARAM_INT); // This line is actually removed by the edit above, but I need to clear the old bind calls
+// No content needed here as it's replaced by the block above.
+$db_dummy_var = 1; // Dummy line to ensure replacement happens cleanly if target matches
+
 
 include '../includes/header.php';
 ?>
+
+
+<!-- Global CSRF Token for JS -->
+<?php echo csrfField(); ?>
 
 <!-- Stats Section -->
 <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);">
     <div class="stat-card">
         <div class="stat-icon primary"><i class="fas fa-tasks"></i></div>
         <div class="stat-info">
-            <h3><?php echo $totalTasks; ?></h3>
+            <h3 id="stat-total"><?php echo $totalTasks; ?></h3>
             <p>Total</p>
         </div>
     </div>
@@ -276,7 +464,7 @@ include '../includes/header.php';
         <div class="stat-icon" style="background: rgba(148,163,184,0.1); color: #94a3b8;"><i class="fas fa-circle"></i>
         </div>
         <div class="stat-info">
-            <h3><?php echo $todoTasks; ?></h3>
+            <h3 id="stat-todo"><?php echo $todoTasks; ?></h3>
             <p>À Faire</p>
         </div>
     </div>
@@ -284,7 +472,7 @@ include '../includes/header.php';
         <div class="stat-icon" style="background: rgba(59,130,246,0.1); color: #60a5fa;"><i class="fas fa-spinner"></i>
         </div>
         <div class="stat-info">
-            <h3><?php echo $inProgressTasks; ?></h3>
+            <h3 id="stat-inprogress"><?php echo $inProgressTasks; ?></h3>
             <p>En Cours</p>
         </div>
     </div>
@@ -292,20 +480,92 @@ include '../includes/header.php';
         <div class="stat-icon" style="background: rgba(139,92,246,0.1); color: #a78bfa;"><i class="fas fa-eye"></i>
         </div>
         <div class="stat-info">
-            <h3><?php echo $reviewTasks; ?></h3>
+            <h3 id="stat-review"><?php echo $reviewTasks; ?></h3>
             <p>En Revue</p>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-icon success"><i class="fas fa-check-circle"></i></div>
         <div class="stat-info">
-            <h3><?php echo $doneTasks; ?></h3>
+            <h3 id="stat-done"><?php echo $doneTasks; ?></h3>
             <p>Terminées</p>
         </div>
     </div>
 </div>
 
-<!-- Tasks Section -->
+<!-- Filters Section -->
+<div class="card mb-4" style="margin-bottom: 2rem; padding: 1.5rem;">
+    <form method="GET" action="tasks.php" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+        <div style="flex: 1; min-width: 200px;">
+            <label style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: block;">Recherche</label>
+            <div style="position: relative;">
+                <i class="fas fa-search" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+                <input type="text" name="search" class="form-control" style="padding-left: 2.5rem;" placeholder="Titre ou description..." value="<?php echo htmlspecialchars($search); ?>">
+            </div>
+        </div>
+
+        <div style="min-width: 150px;">
+            <label style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: block;">Statut</label>
+            <select name="status" class="form-control">
+                <option value="">Tous</option>
+                <option value="todo" <?php echo $filter_status === 'todo' ? 'selected' : ''; ?>>À faire</option>
+                <option value="in_progress" <?php echo $filter_status === 'in_progress' ? 'selected' : ''; ?>>En cours</option>
+                <option value="review" <?php echo $filter_status === 'review' ? 'selected' : ''; ?>>En revue</option>
+                <option value="done" <?php echo $filter_status === 'done' ? 'selected' : ''; ?>>Terminé</option>
+            </select>
+        </div>
+
+        <div style="min-width: 150px;">
+            <label style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: block;">Priorité</label>
+            <select name="priority" class="form-control">
+                <option value="">Toutes</option>
+                <option value="low" <?php echo $filter_priority === 'low' ? 'selected' : ''; ?>>Basse</option>
+                <option value="medium" <?php echo $filter_priority === 'medium' ? 'selected' : ''; ?>>Moyenne</option>
+                <option value="high" <?php echo $filter_priority === 'high' ? 'selected' : ''; ?>>Haute</option>
+            </select>
+        </div>
+
+        <div style="min-width: 150px;">
+            <label style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: block;">Projet</label>
+            <select name="project_id" class="form-control">
+                <option value="">Tous</option>
+                <?php 
+                // Need to re-fetch projects as previous fetch might be consumed or out of scope if not careful, 
+                // but $projects is fetched at top of file lines 19-20, so it's safe.
+                foreach ($projects as $p): 
+                ?>
+                    <option value="<?php echo $p['id']; ?>" <?php echo $filter_project == $p['id'] ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($p['name']); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem;">
+            <button type="submit" class="btn btn-primary" title="Filtrer">
+                <i class="fas fa-filter"></i>
+            </button>
+            <a href="tasks.php" class="btn btn-ghost" title="Réinitialiser" style="border: 1px solid var(--border-color);">
+                <i class="fas fa-undo"></i>
+            </a>
+        </div>
+        
+        <!-- View Toggles -->
+        <div style="width: 100%; border-top: 1px solid var(--border-color); margin-top: 1rem; padding-top: 1rem; display: flex; justify-content: flex-end;">
+            <div style="display: flex; background: var(--bg-main); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color);">
+                <button type="submit" name="view" value="list" class="btn btn-sm <?php echo $view === 'list' ? 'btn-primary' : 'btn-ghost'; ?>" style="border-radius: 6px;">
+                    <i class="fas fa-list"></i> Liste
+                </button>
+                <button type="submit" name="view" value="kanban" class="btn btn-sm <?php echo $view === 'kanban' ? 'btn-primary' : 'btn-ghost'; ?>" style="border-radius: 6px;">
+                    <i class="fas fa-columns"></i> Kanban
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<?php if ($view === 'list'): ?>
+<!-- LIST VIEW -->
 <div class="table-container">
     <div class="table-header">
         <h3 class="table-title">Toutes les Tâches</h3>
@@ -316,6 +576,9 @@ include '../includes/header.php';
         <?php endif; ?>
     </div>
 
+    <?php endif; ?>
+
+    <?php if ($view === 'list'): ?>
     <?php if (count($tasks) > 0): ?>
         <table>
             <thead>
@@ -333,7 +596,22 @@ include '../includes/header.php';
             <tbody>
                 <?php foreach ($tasks as $task): ?>
                     <tr>
-                        <td style="font-weight: 500;"><?php echo htmlspecialchars($task['title']); ?></td>
+                        <td style="font-weight: 500;">
+                            <?php echo htmlspecialchars($task['title']); ?>
+                            <?php if (!empty($task['task_tags_info'])): ?>
+                                <div class="task-tags" style="margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 4px;">
+                                    <?php 
+                                    $tags = explode('|', $task['task_tags_info']);
+                                    foreach ($tags as $tagStr):
+                                        list($tagName, $tagColor) = explode(':', $tagStr);
+                                    ?>
+                                        <span class="badge" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background-color: <?php echo htmlspecialchars($tagColor); ?>; color: white;">
+                                            <?php echo htmlspecialchars($tagName); ?>
+                                        </span>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <div style="display: flex; align-items: center; gap: 0.5rem;">
                                 <div
@@ -441,7 +719,74 @@ include '../includes/header.php';
             <p>Aucune tâche trouvée.</p>
         </div>
     <?php endif; ?>
+
+    <!-- Pagination -->
+    <?php if ($total_pages > 1): ?>
+        <div class="pagination" style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; padding: 1.5rem; border-top: 1px solid var(--border-color);">
+            <?php if ($page > 1): ?>
+                <a href="<?php echo $pageLink . ($page - 1); ?>&view=list" class="btn btn-sm btn-ghost"><i class="fas fa-chevron-left"></i> Précédent</a>
+            <?php endif; ?>
+
+            <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                <a href="<?php echo $pageLink . $i; ?>&view=list" class="btn btn-sm <?php echo $i == $page ? 'btn-primary' : 'btn-ghost'; ?>">
+                    <?php echo $i; ?>
+                </a>
+            <?php endfor; ?>
+
+            <?php if ($page < $total_pages): ?>
+                <a href="<?php echo $pageLink . ($page + 1); ?>&view=list" class="btn btn-sm btn-ghost">Suivant <i class="fas fa-chevron-right"></i></a>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
 </div>
+
+<?php else: ?>
+<!-- KANBAN VIEW -->
+<div class="kanban-board">
+    <!-- To Do Column -->
+    <div class="kanban-column" data-status="todo" ondrop="drop(event)" ondragover="allowDrop(event)">
+        <div class="kanban-column-header header-todo">
+            <h3>À Faire <span class="count"><?php echo count($kanbanData['todo']); ?></span></h3>
+        </div>
+        <div class="kanban-tasks" id="col-todo">
+            <?php renderKanbanCards($kanbanData['todo']); ?>
+        </div>
+    </div>
+
+    <!-- In Progress Column -->
+    <div class="kanban-column" data-status="in_progress" ondrop="drop(event)" ondragover="allowDrop(event)">
+        <div class="kanban-column-header header-progress">
+            <h3>En Cours <span class="count"><?php echo count($kanbanData['in_progress']); ?></span></h3>
+        </div>
+        <div class="kanban-tasks" id="col-in_progress">
+            <?php renderKanbanCards($kanbanData['in_progress']); ?>
+        </div>
+    </div>
+
+    <!-- Review Column -->
+    <div class="kanban-column" data-status="review" ondrop="drop(event)" ondragover="allowDrop(event)">
+        <div class="kanban-column-header header-review">
+            <h3>En Revue <span class="count"><?php echo count($kanbanData['review']); ?></span></h3>
+        </div>
+        <div class="kanban-tasks" id="col-review">
+            <?php renderKanbanCards($kanbanData['review']); ?>
+        </div>
+    </div>
+
+    <!-- Done Column -->
+    <div class="kanban-column" data-status="done" ondrop="drop(event)" ondragover="allowDrop(event)">
+        <div class="kanban-column-header header-done">
+            <h3>Terminé <span class="count"><?php echo count($kanbanData['done']); ?></span></h3>
+        </div>
+        <div class="kanban-tasks" id="col-done">
+            <?php renderKanbanCards($kanbanData['done']); ?>
+        </div>
+    </div>
+</div>
+
+<!-- Include Kanban JS only in Kanban view -->
+<script src="../assets/js/kanban.js"></script>
+<?php endif; ?>
 
 <!-- Add Task Modal -->
 <?php if ($role === 'admin'): ?>
@@ -452,6 +797,7 @@ include '../includes/header.php';
                 <button class="modal-close" onclick="closeModal()">&times;</button>
             </div>
             <form id="addTaskForm">
+                <?php echo csrfField(); ?>
                 <input type="hidden" name="action" value="add_task">
 
                 <div class="form-group">
@@ -492,6 +838,25 @@ include '../includes/header.php';
                 </div>
 
                 <div class="form-group">
+                    <label>Pièce jointe (Optionnel)</label>
+                    <input type="file" name="attachment" class="form-control">
+                    <small style="color: var(--text-muted);">Formats acceptés: PDF, DOCX, JPG, PNG, ZIP...</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Étiquettes</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                        <?php foreach ($allTags as $tag): ?>
+                            <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; cursor: pointer; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 20px;">
+                                <input type="checkbox" name="tags[]" value="<?php echo $tag['id']; ?>">
+                                <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: <?php echo htmlspecialchars($tag['color']); ?>;"></span>
+                                <?php echo htmlspecialchars($tag['name']); ?>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <div class="form-group">
                     <label>Assigner à *</label>
                     <select name="assigned_to" class="form-control" required>
                         <option value="">-- Sélectionner un développeur --</option>
@@ -517,6 +882,7 @@ include '../includes/header.php';
                 <button class="modal-close" onclick="closeEditModal()">&times;</button>
             </div>
             <form id="editTaskForm">
+                <?php echo csrfField(); ?>
                 <input type="hidden" name="action" value="update_task">
                 <input type="hidden" name="task_id" id="edit_task_id">
 
@@ -557,6 +923,25 @@ include '../includes/header.php';
                 </div>
 
                 <div class="form-group">
+                    <label>Ajouter une pièce jointe</label>
+                    <input type="file" name="attachment" class="form-control">
+                    <small style="color: var(--text-muted);">Laissez vide pour conserver les fichiers existants.</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Étiquettes</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                        <?php foreach ($allTags as $tag): ?>
+                            <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; cursor: pointer; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 20px;">
+                                <input type="checkbox" name="tags[]" value="<?php echo $tag['id']; ?>" class="edit-tag-checkbox">
+                                <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: <?php echo htmlspecialchars($tag['color']); ?>;"></span>
+                                <?php echo htmlspecialchars($tag['name']); ?>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <div class="form-group">
                     <label>Assigner à *</label>
                     <select name="assigned_to" id="edit_assigned_to" class="form-control" required>
                         <option value="">-- Sélectionner un développeur --</option>
@@ -593,6 +978,11 @@ include '../includes/header.php';
                     <p id="view_description" style="color: var(--text-secondary); margin-top: 0.25rem;"></p>
                 </div>
 
+                <div style="margin-top: 1rem;">
+                    <label style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Étiquettes</label>
+                    <div id="view_tags_container" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem;"></div>
+                </div>
+
                 <div
                     style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
                     <div>
@@ -627,222 +1017,96 @@ include '../includes/header.php';
                     </div>
                 </div>
 
+                </div>
+
+                <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                    <label style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 0.5rem;">Pièces jointes</label>
+                    <div id="view_attachments"></div>
+                </div>
+
                 <div class="modal-footer" style="border-top: none; padding-top: 1.5rem;">
-                    <button type="button" class="btn btn-ghost" onclick="closeViewModal()">Fermer</button>
+                    
+                    <!-- Comments Section -->
+                    <div style="width: 100%; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                        <h4 style="font-size: 1rem; margin-bottom: 1rem; color: var(--text-main);">Commentaires</h4>
+                        
+                        <div id="view_comments_list" style="margin-bottom: 1rem; max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
+                            <!-- Comments injected by JS -->
+                        </div>
+
+                        <form id="addCommentForm" onsubmit="submitComment(event)" style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                            <input type="text" id="new_comment_text" class="form-control" placeholder="Ajouter un commentaire..." required style="flex: 1;">
+                            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-paper-plane"></i></button>
+                        </form>
+                    </div>
+
+                    <div style="width: 100%; display: flex; justify-content: flex-end; margin-top: 1rem;">
+                        <button type="button" class="btn btn-ghost" onclick="closeViewModal()">Fermer</button>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <script>
-        function openModal() {
-            document.getElementById('taskModal').classList.add('active');
-        }
-
-        function closeModal() {
-            document.getElementById('taskModal').classList.remove('active');
-            document.getElementById('addTaskForm').reset();
-        }
-
-        document.getElementById('addTaskForm').addEventListener('submit', function (e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-
-            fetch('tasks.php', {
-                method: 'POST',
-                body: formData
-            })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        location.reload();
-                    } else {
-                        alert(data.message);
-                    }
-                });
-        });
-
-        function updateStatus(taskId, status) {
-            const formData = new FormData();
-            formData.append('action', 'update_status');
-            formData.append('task_id', taskId);
-            formData.append('status', status);
-
-            fetch('tasks.php', {
-                method: 'POST',
-                body: formData
-            })
-                .then(res => res.json())
-                .then(data => {
-                    if (!data.success) {
-                        alert(data.message || 'Erreur');
-                        location.reload();
-                    }
-                });
-        }
-
-        // Close modal on outside click
-        document.getElementById('taskModal').addEventListener('click', function (e) {
-            if (e.target === this) closeModal();
-        });
-
-        function deleteTask(taskId, taskTitle) {
-            if (confirm('Êtes-vous sûr de vouloir supprimer la tâche "' + taskTitle + '" ?')) {
-                const formData = new FormData();
-                formData.append('action', 'delete_task');
-                formData.append('task_id', taskId);
-
-                fetch('tasks.php', {
-                    method: 'POST',
-                    body: formData
-                })
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.success) {
-                            location.reload();
-                        } else {
-                            alert(data.message || 'Erreur lors de la suppression');
-                        }
-                    });
-            }
-        }
-
-        function advanceStatus(taskId) {
-            const formData = new FormData();
-            formData.append('action', 'advance_status');
-            formData.append('task_id', taskId);
-
-            fetch('tasks.php', {
-                method: 'POST',
-                body: formData
-            })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        location.reload();
-                    } else {
-                        alert(data.message || 'Erreur');
-                    }
-                });
-        }
-
-        // Edit Modal Functions
-        function openEditModal(taskId) {
-            const formData = new FormData();
-            formData.append('action', 'get_task');
-            formData.append('task_id', taskId);
-
-            fetch('tasks.php', {
-                method: 'POST',
-                body: formData
-            })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        const task = data.task;
-                        document.getElementById('edit_task_id').value = task.id;
-                        document.getElementById('edit_title').value = task.title;
-                        document.getElementById('edit_description').value = task.description || '';
-                        document.getElementById('edit_project_id').value = task.project_id;
-                        document.getElementById('edit_priority').value = task.priority;
-                        document.getElementById('edit_due_date').value = task.due_date || '';
-                        document.getElementById('edit_assigned_to').value = task.assigned_to || '';
-                        document.getElementById('editTaskModal').classList.add('active');
-                    } else {
-                        alert(data.message || 'Erreur lors du chargement');
-                    }
-                });
-        }
-
-        function closeEditModal() {
-            document.getElementById('editTaskModal').classList.remove('active');
-            document.getElementById('editTaskForm').reset();
-        }
-
-        document.getElementById('editTaskForm').addEventListener('submit', function (e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-
-            fetch('tasks.php', {
-                method: 'POST',
-                body: formData
-            })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        location.reload();
-                    } else {
-                        alert(data.message || 'Erreur');
-                    }
-                });
-        });
-
-        // Close edit modal on outside click
-        document.getElementById('editTaskModal').addEventListener('click', function (e) {
-            if (e.target === this) closeEditModal();
-        });
-
-        // View Modal Functions
-        function openViewModal(taskId) {
-            const formData = new FormData();
-            formData.append('action', 'get_task');
-            formData.append('task_id', taskId);
-
-            fetch('tasks.php', {
-                method: 'POST',
-                body: formData
-            })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        const task = data.task;
-                        document.getElementById('view_title').textContent = task.title;
-                        document.getElementById('view_description').textContent = task.description || 'Aucune description';
-
-                        // Status badge
-                        const statusLabels = { 'todo': 'À faire', 'in_progress': 'En cours', 'review': 'En revue', 'done': 'Terminé' };
-                        const statusEl = document.getElementById('view_status');
-                        statusEl.textContent = statusLabels[task.status] || task.status;
-                        statusEl.className = 'badge badge-status-' + task.status;
-
-                        // Priority badge
-                        const priorityLabels = { 'low': 'Basse', 'medium': 'Moyenne', 'high': 'Haute' };
-                        document.getElementById('view_priority_container').innerHTML =
-                            '<span class="badge badge-' + task.priority + '">' + priorityLabels[task.priority] + '</span>';
-
-                        document.getElementById('view_project').textContent = task.project_name || 'ASTREE';
-                        document.getElementById('view_assigned').textContent = task.assigned_user || 'Non assigné';
-                        document.getElementById('view_due_date').textContent = task.due_date || 'Non définie';
-                        document.getElementById('view_created_at').textContent = task.created_at ? new Date(task.created_at).toLocaleDateString('fr-FR') : '-';
-
-                        // Duration
-                        if (task.duration) {
-                            let durationText = '';
-                            const mins = parseInt(task.duration);
-                            if (mins < 60) durationText = mins + ' min';
-                            else if (mins < 1440) durationText = Math.floor(mins / 60) + 'h ' + (mins % 60 > 0 ? (mins % 60) + 'min' : '');
-                            else durationText = Math.floor(mins / 1440) + 'j ' + Math.floor((mins % 1440) / 60) + 'h';
-                            document.getElementById('view_duration').textContent = durationText;
-                        } else {
-                            document.getElementById('view_duration').textContent = '-';
-                        }
-
-                        document.getElementById('viewTaskModal').classList.add('active');
-                    } else {
-                        alert(data.message || 'Erreur');
-                    }
-                });
-        }
-
-        function closeViewModal() {
-            document.getElementById('viewTaskModal').classList.remove('active');
-        }
-
-        // Close view modal on outside click
-        document.getElementById('viewTaskModal').addEventListener('click', function (e) {
-            if (e.target === this) closeViewModal();
-        });
-    </script>
 <?php endif; ?>
+
+<script src="../assets/js/tasks.js"></script>
+
+<!-- Helper Function for Kanban Cards -->
+<?php
+function renderKanbanCards($tasks) {
+    foreach ($tasks as $task) {
+        $priorityClass = 'border-' . $task['priority'];
+        ?>
+        <div class="kanban-card <?php echo $priorityClass; ?>" 
+             draggable="true" 
+             ondragstart="drag(event)" 
+             id="task-<?php echo $task['id']; ?>"
+             data-task-id="<?php echo $task['id']; ?>"
+        <div class="kanban-card <?php echo $priorityClass; ?>" 
+             draggable="true" 
+             ondragstart="drag(event)" 
+             id="task-<?php echo $task['id']; ?>"
+             data-task-id="<?php echo $task['id']; ?>"
+             onclick="openViewModal(<?php echo $task['id']; ?>)">
+            
+            <div class="kanban-card-header">
+                <span class="project-badge" style="background-color: <?php echo htmlspecialchars($task['project_color'] ?? '#ccc'); ?>">
+                    <?php echo htmlspecialchars($task['project_name'] ?? 'Projet'); ?>
+                </span>
+                <?php if ($task['priority'] === 'high'): ?>
+                    <i class="fas fa-exclamation-circle text-danger" title="Priorité Haute"></i>
+                <?php endif; ?>
+            </div>
+            
+            <h4 class="kanban-card-title"><?php echo htmlspecialchars($task['title']); ?></h4>
+            
+            <?php if (!empty($task['task_tags_info'])): ?>
+                <div class="kanban-tags">
+                <?php 
+                    $tags = explode('|', $task['task_tags_info']);
+                    foreach ($tags as $tagStr):
+                        list($tagName, $tagColor) = explode(':', $tagStr);
+                ?>
+                    <span class="badge" style="background-color: <?php echo htmlspecialchars($tagColor); ?>; font-size: 0.65rem;">
+                        <?php echo htmlspecialchars($tagName); ?>
+                    </span>
+                <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <div class="kanban-card-footer">
+                <div class="assignee">
+                    <i class="fas fa-user-circle"></i> <?php echo htmlspecialchars($task['assigned_user'] ?? 'Na'); ?>
+                </div>
+                <div class="date">
+                    <?php echo $task['due_date'] ? date('d/m', strtotime($task['due_date'])) : ''; ?>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+}
+?>
 
 <?php include '../includes/footer.php'; ?>

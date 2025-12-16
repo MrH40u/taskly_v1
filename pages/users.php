@@ -2,6 +2,7 @@
 // pages/users.php
 require '../config/db.php';
 require '../includes/functions.php';
+require '../includes/csrf.php';
 
 requireAdmin();
 
@@ -9,25 +10,30 @@ $error = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_user'])) {
-    $username = cleanInput($_POST['username']);
-    $email = cleanInput($_POST['email']);
-    $password = $_POST['password'];
-    $role = $_POST['role'];
-
-    if (empty($username) || empty($password) || empty($email)) {
-        $error = "Tous les champs sont requis.";
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        $error = "Token de sécurité invalide.";
     } else {
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
-        $stmt->execute([$username, $email]);
-        if ($stmt->fetch()) {
-            $error = "Utilisateur ou email déjà existant.";
+        $username = cleanInput($_POST['username']);
+        $email = cleanInput($_POST['email']);
+        $password = $_POST['password'];
+        $role = $_POST['role'];
+
+        if (empty($username) || empty($password) || empty($email)) {
+            $error = "Tous les champs sont requis.";
         } else {
-            $hashed = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare("INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)");
-            if ($stmt->execute([$username, $email, $hashed, $role])) {
-                $success = "Utilisateur créé avec succès !";
+            $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
+            $stmt->execute([$username, $email]);
+            if ($stmt->fetch()) {
+                $error = "Utilisateur ou email déjà existant.";
             } else {
-                $error = "Erreur lors de la création.";
+                $hashed = password_hash($password, PASSWORD_DEFAULT);
+                $stmt = $pdo->prepare("INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)");
+                if ($stmt->execute([$username, $email, $hashed, $role])) {
+                    $success = "Utilisateur créé avec succès !";
+                } else {
+                    $error = "Erreur lors de la création.";
+                }
             }
         }
     }
@@ -49,6 +55,7 @@ include '../includes/header.php';
             <div class="alert alert-success"><?php echo $success; ?></div> <?php endif; ?>
 
         <form method="POST" action="">
+            <?php echo csrfField(); ?>
             <input type="hidden" name="create_user" value="1">
             <div class="form-group">
                 <label>Nom d'utilisateur</label>

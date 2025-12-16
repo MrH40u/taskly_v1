@@ -2,35 +2,31 @@
 // pages/dashboard.php
 require '../config/db.php';
 require '../includes/functions.php';
+require '../includes/classes/TaskRepository.php';
 
 requireLogin();
 
 $user_id = $_SESSION['user_id'];
 $role = $_SESSION['user_role'];
 
-// Fetch stats
-$totalTasks = $pdo->query("SELECT COUNT(*) FROM tasks")->fetchColumn();
-$todoTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'todo'")->fetchColumn();
-$inProgressTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'in_progress'")->fetchColumn();
-$doneTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'done'")->fetchColumn();
+$repo = new TaskRepository($pdo);
 
-// Fetch tasks based on role
-if ($role === 'admin') {
-    $sql = "SELECT t.*, u.username as assigned_user 
-            FROM tasks t 
-            LEFT JOIN users u ON t.assigned_to = u.id 
-            ORDER BY t.created_at DESC LIMIT 10";
-    $stmt = $pdo->query($sql);
-} else {
-    $sql = "SELECT t.*, u.username as assigned_user 
-            FROM tasks t 
-            LEFT JOIN users u ON t.assigned_to = u.id 
-            WHERE t.assigned_to = ? 
-            ORDER BY t.created_at DESC LIMIT 10";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([$user_id]);
-}
-$tasks = $stmt->fetchAll();
+// Fetch stats
+$stats = $repo->getStats();
+$totalTasks = $stats['total'];
+$todoTasks = $stats['todo'];
+$inProgressTasks = $stats['in_progress'];
+$doneTasks = $stats['done'];
+
+// Fetch recent tasks (Top 10)
+$filters = ['role' => $role, 'user_id' => $user_id];
+$recentTasksData = $repo->getAllTasks($filters, 10, 0);
+$tasks = $recentTasksData['tasks'];
+
+
+// Include Chart.js
+echo '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
+echo '<script src="../assets/js/dashboard_charts.js" defer></script>';
 
 include '../includes/header.php';
 ?>
@@ -74,6 +70,33 @@ include '../includes/header.php';
         <div class="stat-info">
             <h3><?php echo $doneTasks; ?></h3>
             <p>Terminées</p>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+    <!-- Status Distribution -->
+    <div class="card" style="padding: 1.5rem; height: 320px;">
+        <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--text-secondary);">Répartition par Statut</h3>
+        <div style="position: relative; height: 250px;">
+            <canvas id="statusChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Project Breakdown -->
+    <div class="card" style="padding: 1.5rem; height: 320px;">
+        <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--text-secondary);">Tâches par Projet (Top 5)</h3>
+        <div style="position: relative; height: 250px;">
+            <canvas id="projectChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Priority Breakdown -->
+    <div class="card" style="padding: 1.5rem; height: 320px;">
+        <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--text-secondary);">Répartition par Priorité</h3>
+        <div style="position: relative; height: 250px;">
+            <canvas id="priorityChart"></canvas>
         </div>
     </div>
 </div>

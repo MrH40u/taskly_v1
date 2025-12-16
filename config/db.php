@@ -19,4 +19,3 @@ try {
         die("Connection failed: " . $e2->getMessage());
     }
 }
-?>

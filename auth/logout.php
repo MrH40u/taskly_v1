@@ -2,6 +2,6 @@
 // auth/logout.php
 session_start();
 session_destroy();
-header("Location: /Taskly/auth/login.php");
+header("Location: /taskly_v1/auth/login.php");
 exit;
 ?>
