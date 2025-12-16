@@ -19,7 +19,7 @@ function isAdmin()
 function requireLogin()
 {
     if (!isLoggedIn()) {
-        header("Location: /taskly_v1/auth/login.php");
+        header("Location: /Taskly/auth/login.php");
         exit;
     }
 }
@@ -43,7 +43,7 @@ function cleanInput($data)
  * @param PDO $pdo Connexion base de données
  * @param int $user_id ID de l'utilisateur destinataire
  * @param string $message Message de la notification
- * @param string|null $link Lien optionnel (ex: /taskly_v1/pages/tasks.php?view=123)
+ * @param string|null $link Lien optionnel (ex: /Taskly/pages/tasks.php?view=123)
  * @return bool
  */
 function createNotification($pdo, $user_id, $message, $link = null)
@@ -67,5 +67,5 @@ function getUnreadNotificationCount($pdo, $user_id)
 {
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
     $stmt->execute([$user_id]);
-    return (int)$stmt->fetchColumn();
+    return (int) $stmt->fetchColumn();
 }

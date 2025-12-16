@@ -71,8 +71,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
             $uploadDir = '../uploads/';
             $fileName = basename($_FILES['attachment']['name']);
-            $targetPath = $uploadDir . time() . '_' . $fileName; 
-            
+            $targetPath = $uploadDir . time() . '_' . $fileName;
+
             $allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'txt', 'zip'];
             $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
 
@@ -90,9 +90,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         // Notify Assignee
         if ($assigned_to && $assigned_to != $user_id) {
-            createNotification($pdo, $assigned_to, "On vous a assigné une nouvelle tâche : $title", "/taskly_v1/pages/tasks.php");
+            createNotification($pdo, $assigned_to, "On vous a assigné une nouvelle tâche : $title", "/Taskly/pages/tasks.php");
         }
-        
+
         echo json_encode(['success' => true, 'message' => 'Tâche créée avec succès']);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Erreur: ' . $e->getMessage()]);
@@ -122,10 +122,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 
     $taskIdRepo->updateStatus($task_id, $status);
-    
+
     // Notify if Admin changed status for someone else
     if ($role === 'admin' && $task['assigned_to'] != $user_id) {
-        createNotification($pdo, $task['assigned_to'], "Le statut de votre tâche a été mis à jour : " . $status, "/taskly_v1/pages/tasks.php");
+        createNotification($pdo, $task['assigned_to'], "Le statut de votre tâche a été mis à jour : " . $status, "/Taskly/pages/tasks.php");
     }
 
     echo json_encode(['success' => true]);
@@ -202,13 +202,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             'due_date' => $due_date,
             'project_id' => $project_id
         ]);
-        
+
         // Handle File Upload (Edit Mode)
         if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
             $uploadDir = '../uploads/';
             $fileName = basename($_FILES['attachment']['name']);
-            $targetPath = $uploadDir . time() . '_' . $fileName; 
-            
+            $targetPath = $uploadDir . time() . '_' . $fileName;
+
             $allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'txt', 'zip'];
             $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
 
@@ -226,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         // Notify Assignee (New or Old) - Simple approach: Notify the currently assigned person
         if ($assigned_to && $assigned_to != $user_id) {
-            createNotification($pdo, $assigned_to, "Une de vos tâches a été modifiée : $title", "/taskly_v1/pages/tasks.php");
+            createNotification($pdo, $assigned_to, "Une de vos tâches a été modifiée : $title", "/Taskly/pages/tasks.php");
         }
 
         echo json_encode(['success' => true, 'message' => 'Tâche mise à jour']);
@@ -327,7 +327,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         exit;
     }
 
-    $task_id = (int)$_POST['task_id'];
+    $task_id = (int) $_POST['task_id'];
     $comment = cleanInput($_POST['comment']);
 
     if (empty($comment)) {
@@ -337,11 +337,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     try {
         $commentId = $taskIdRepo->addComment($task_id, $user_id, $comment);
-        
+
         // Notify Assignee if someone else commented
         $task = $taskIdRepo->getTaskById($task_id);
         if ($task && $task['assigned_to'] != $user_id) {
-            createNotification($pdo, $task['assigned_to'], "Nouveau commentaire sur : " . $task['title'], "/taskly_v1/pages/tasks.php");
+            createNotification($pdo, $task['assigned_to'], "Nouveau commentaire sur : " . $task['title'], "/Taskly/pages/tasks.php");
         }
 
         echo json_encode(['success' => true, 'message' => 'Commentaire ajouté']);
@@ -360,7 +360,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         exit;
     }
 
-    $comment_id = (int)$_POST['comment_id'];
+    $comment_id = (int) $_POST['comment_id'];
     $isAdmin = ($role === 'admin');
 
     try {
@@ -390,9 +390,9 @@ if (!in_array($view, ['list', 'kanban'])) {
 }
 
 // Pagination & Filtering
-$page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
+$page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int) $_GET['page'] : 1;
 // Disable pagination for Kanban (show consistent board) or set high limit
-$limit = ($view === 'kanban') ? 1000 : 10; 
+$limit = ($view === 'kanban') ? 1000 : 10;
 $offset = ($page - 1) * $limit;
 
 // Filter Parameters
@@ -497,26 +497,32 @@ include '../includes/header.php';
 <div class="card mb-4" style="margin-bottom: 2rem; padding: 1.5rem;">
     <form method="GET" action="tasks.php" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
         <div style="flex: 1; min-width: 200px;">
-            <label style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: block;">Recherche</label>
+            <label
+                style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: block;">Recherche</label>
             <div style="position: relative;">
-                <i class="fas fa-search" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
-                <input type="text" name="search" class="form-control" style="padding-left: 2.5rem;" placeholder="Titre ou description..." value="<?php echo htmlspecialchars($search); ?>">
+                <i class="fas fa-search"
+                    style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+                <input type="text" name="search" class="form-control" style="padding-left: 2.5rem;"
+                    placeholder="Titre ou description..." value="<?php echo htmlspecialchars($search); ?>">
             </div>
         </div>
 
         <div style="min-width: 150px;">
-            <label style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: block;">Statut</label>
+            <label
+                style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: block;">Statut</label>
             <select name="status" class="form-control">
                 <option value="">Tous</option>
                 <option value="todo" <?php echo $filter_status === 'todo' ? 'selected' : ''; ?>>À faire</option>
-                <option value="in_progress" <?php echo $filter_status === 'in_progress' ? 'selected' : ''; ?>>En cours</option>
+                <option value="in_progress" <?php echo $filter_status === 'in_progress' ? 'selected' : ''; ?>>En cours
+                </option>
                 <option value="review" <?php echo $filter_status === 'review' ? 'selected' : ''; ?>>En revue</option>
                 <option value="done" <?php echo $filter_status === 'done' ? 'selected' : ''; ?>>Terminé</option>
             </select>
         </div>
 
         <div style="min-width: 150px;">
-            <label style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: block;">Priorité</label>
+            <label
+                style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: block;">Priorité</label>
             <select name="priority" class="form-control">
                 <option value="">Toutes</option>
                 <option value="low" <?php echo $filter_priority === 'low' ? 'selected' : ''; ?>>Basse</option>
@@ -526,14 +532,15 @@ include '../includes/header.php';
         </div>
 
         <div style="min-width: 150px;">
-            <label style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: block;">Projet</label>
+            <label
+                style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: block;">Projet</label>
             <select name="project_id" class="form-control">
                 <option value="">Tous</option>
-                <?php 
+                <?php
                 // Need to re-fetch projects as previous fetch might be consumed or out of scope if not careful, 
                 // but $projects is fetched at top of file lines 19-20, so it's safe.
-                foreach ($projects as $p): 
-                ?>
+                foreach ($projects as $p):
+                    ?>
                     <option value="<?php echo $p['id']; ?>" <?php echo $filter_project == $p['id'] ? 'selected' : ''; ?>>
                         <?php echo htmlspecialchars($p['name']); ?>
                     </option>
@@ -545,18 +552,25 @@ include '../includes/header.php';
             <button type="submit" class="btn btn-primary" title="Filtrer">
                 <i class="fas fa-filter"></i>
             </button>
-            <a href="tasks.php" class="btn btn-ghost" title="Réinitialiser" style="border: 1px solid var(--border-color);">
+            <a href="tasks.php" class="btn btn-ghost" title="Réinitialiser"
+                style="border: 1px solid var(--border-color);">
                 <i class="fas fa-undo"></i>
             </a>
         </div>
-        
+
         <!-- View Toggles -->
-        <div style="width: 100%; border-top: 1px solid var(--border-color); margin-top: 1rem; padding-top: 1rem; display: flex; justify-content: flex-end;">
-            <div style="display: flex; background: var(--bg-main); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color);">
-                <button type="submit" name="view" value="list" class="btn btn-sm <?php echo $view === 'list' ? 'btn-primary' : 'btn-ghost'; ?>" style="border-radius: 6px;">
+        <div
+            style="width: 100%; border-top: 1px solid var(--border-color); margin-top: 1rem; padding-top: 1rem; display: flex; justify-content: flex-end;">
+            <div
+                style="display: flex; background: var(--bg-main); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color);">
+                <button type="submit" name="view" value="list"
+                    class="btn btn-sm <?php echo $view === 'list' ? 'btn-primary' : 'btn-ghost'; ?>"
+                    style="border-radius: 6px;">
                     <i class="fas fa-list"></i> Liste
                 </button>
-                <button type="submit" name="view" value="kanban" class="btn btn-sm <?php echo $view === 'kanban' ? 'btn-primary' : 'btn-ghost'; ?>" style="border-radius: 6px;">
+                <button type="submit" name="view" value="kanban"
+                    class="btn btn-sm <?php echo $view === 'kanban' ? 'btn-primary' : 'btn-ghost'; ?>"
+                    style="border-radius: 6px;">
                     <i class="fas fa-columns"></i> Kanban
                 </button>
             </div>
@@ -565,227 +579,232 @@ include '../includes/header.php';
 </div>
 
 <?php if ($view === 'list'): ?>
-<!-- LIST VIEW -->
-<div class="table-container">
-    <div class="table-header">
-        <h3 class="table-title">Toutes les Tâches</h3>
-        <?php if ($role === 'admin'): ?>
-            <button class="btn btn-primary" onclick="openModal()">
-                <i class="fas fa-plus"></i> Ajouter une Tâche
-            </button>
-        <?php endif; ?>
-    </div>
+    <!-- LIST VIEW -->
+    <div class="table-container">
+        <div class="table-header">
+            <h3 class="table-title">Toutes les Tâches</h3>
+            <?php if ($role === 'admin'): ?>
+                <button class="btn btn-primary" onclick="openModal()">
+                    <i class="fas fa-plus"></i> Ajouter une Tâche
+                </button>
+            <?php endif; ?>
+        </div>
 
     <?php endif; ?>
 
     <?php if ($view === 'list'): ?>
-    <?php if (count($tasks) > 0): ?>
-        <table>
-            <thead>
-                <tr>
-                    <th>Titre</th>
-                    <th>Projet</th>
-                    <th>Priorité</th>
-                    <th>Statut</th>
-                    <th>Durée</th>
-                    <th>Assigné à</th>
-                    <th>Date limite</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($tasks as $task): ?>
+        <?php if (count($tasks) > 0): ?>
+            <table>
+                <thead>
                     <tr>
-                        <td style="font-weight: 500;">
-                            <?php echo htmlspecialchars($task['title']); ?>
-                            <?php if (!empty($task['task_tags_info'])): ?>
-                                <div class="task-tags" style="margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 4px;">
-                                    <?php 
-                                    $tags = explode('|', $task['task_tags_info']);
-                                    foreach ($tags as $tagStr):
-                                        list($tagName, $tagColor) = explode(':', $tagStr);
-                                    ?>
-                                        <span class="badge" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background-color: <?php echo htmlspecialchars($tagColor); ?>; color: white;">
-                                            <?php echo htmlspecialchars($tagName); ?>
-                                        </span>
-                                    <?php endforeach; ?>
-                                </div>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                <div
-                                    style="width: 10px; height: 10px; border-radius: 3px; background: <?php echo htmlspecialchars($task['project_color'] ?? '#6366f1'); ?>;">
-                                </div>
-                                <span
-                                    style="color: var(--text-secondary);"><?php echo htmlspecialchars($task['project_name'] ?? 'ASTREE'); ?></span>
-                            </div>
-                        </td>
-                        <td><span
-                                class="badge badge-<?php echo $task['priority']; ?>"><?php echo ucfirst($task['priority']); ?></span>
-                        </td>
-                        <td>
-                            <?php
-                            $statusLabels = [
-                                'todo' => 'À faire',
-                                'in_progress' => 'En cours',
-                                'review' => 'En revue',
-                                'done' => 'Terminé'
-                            ];
-                            ?>
-                            <span class="badge badge-status-<?php echo $task['status']; ?>">
-                                <?php echo $statusLabels[$task['status']] ?? $task['status']; ?>
-                            </span>
-                        </td>
-                        <td style="color: var(--text-muted);">
-                            <?php if ($task['status'] === 'done' && $task['duration']): ?>
-                                <?php
-                                $mins = $task['duration'];
-                                if ($mins < 60) {
-                                    echo $mins . ' min';
-                                } elseif ($mins < 1440) {
-                                    $hours = floor($mins / 60);
-                                    $remaining = $mins % 60;
-                                    echo $hours . 'h ' . ($remaining > 0 ? $remaining . 'min' : '');
-                                } else {
-                                    $days = floor($mins / 1440);
-                                    $hours = floor(($mins % 1440) / 60);
-                                    echo $days . 'j ' . ($hours > 0 ? $hours . 'h' : '');
-                                }
-                                ?>
-                            <?php else: ?>
-                                -
-                            <?php endif; ?>
-                        </td>
-                        <td style="color: var(--text-muted);">
-                            <?php echo htmlspecialchars($task['assigned_user'] ?? 'Non assigné'); ?>
-                        </td>
-                        <td style="color: var(--text-muted);"><?php echo $task['due_date'] ?? '-'; ?></td>
-                        <td>
-                            <div style="display: flex; gap: 0.5rem;">
-                                <?php if ($task['status'] !== 'done'):
-                                    // Button styles based on current status
-                                    $btnStyles = [
-                                        'todo' => 'background: rgba(148,163,184,0.15); color: #94a3b8;',
-                                        'in_progress' => 'background: rgba(59,130,246,0.15); color: #60a5fa;',
-                                        'review' => 'background: rgba(139,92,246,0.15); color: #a78bfa;'
-                                    ];
-                                    $btnIcons = [
-                                        'todo' => 'fa-play',
-                                        'in_progress' => 'fa-eye',
-                                        'review' => 'fa-check'
-                                    ];
-                                    $btnTitles = [
-                                        'todo' => 'Démarrer (En cours)',
-                                        'in_progress' => 'Mettre en revue',
-                                        'review' => 'Terminer'
-                                    ];
-                                    $style = $btnStyles[$task['status']] ?? '';
-                                    $icon = $btnIcons[$task['status']] ?? 'fa-check';
-                                    $title = $btnTitles[$task['status']] ?? 'Avancer';
-                                    ?>
-                                    <button class="btn btn-sm"
-                                        style="<?php echo $style; ?> border: none; border-radius: 8px; padding: 0.5rem 0.75rem;"
-                                        onclick="advanceStatus(<?php echo $task['id']; ?>)" title="<?php echo $title; ?>">
-                                        <i class="fas <?php echo $icon; ?>"></i>
-                                    </button>
-                                <?php endif; ?>
-                                <?php if ($role === 'admin' && $task['status'] !== 'done'): ?>
-                                    <button class="btn btn-ghost btn-sm" onclick="openEditModal(<?php echo $task['id']; ?>)"
-                                        title="Modifier">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                <?php endif; ?>
-                                <button class="btn btn-ghost btn-sm" style="color: var(--info);"
-                                    onclick="openViewModal(<?php echo $task['id']; ?>)" title="Voir les détails">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                                <?php if ($role === 'admin'): ?>
-                                    <button class="btn btn-ghost btn-sm" style="color: var(--danger);"
-                                        onclick="deleteTask(<?php echo $task['id']; ?>, '<?php echo addslashes(htmlspecialchars($task['title'])); ?>')"
-                                        title="Supprimer">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                <?php endif; ?>
-                            </div>
-                        </td>
+                        <th>Titre</th>
+                        <th>Projet</th>
+                        <th>Priorité</th>
+                        <th>Statut</th>
+                        <th>Durée</th>
+                        <th>Assigné à</th>
+                        <th>Date limite</th>
+                        <th>Actions</th>
                     </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    <?php else: ?>
-        <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
-            <i class="fas fa-inbox" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
-            <p>Aucune tâche trouvée.</p>
-        </div>
-    <?php endif; ?>
+                </thead>
+                <tbody>
+                    <?php foreach ($tasks as $task): ?>
+                        <tr>
+                            <td style="font-weight: 500;">
+                                <?php echo htmlspecialchars($task['title']); ?>
+                                <?php if (!empty($task['task_tags_info'])): ?>
+                                    <div class="task-tags" style="margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 4px;">
+                                        <?php
+                                        $tags = explode('|', $task['task_tags_info']);
+                                        foreach ($tags as $tagStr):
+                                            list($tagName, $tagColor) = explode(':', $tagStr);
+                                            ?>
+                                            <span class="badge"
+                                                style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background-color: <?php echo htmlspecialchars($tagColor); ?>; color: white;">
+                                                <?php echo htmlspecialchars($tagName); ?>
+                                            </span>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <div
+                                        style="width: 10px; height: 10px; border-radius: 3px; background: <?php echo htmlspecialchars($task['project_color'] ?? '#6366f1'); ?>;">
+                                    </div>
+                                    <span
+                                        style="color: var(--text-secondary);"><?php echo htmlspecialchars($task['project_name'] ?? 'ASTREE'); ?></span>
+                                </div>
+                            </td>
+                            <td><span
+                                    class="badge badge-<?php echo $task['priority']; ?>"><?php echo ucfirst($task['priority']); ?></span>
+                            </td>
+                            <td>
+                                <?php
+                                $statusLabels = [
+                                    'todo' => 'À faire',
+                                    'in_progress' => 'En cours',
+                                    'review' => 'En revue',
+                                    'done' => 'Terminé'
+                                ];
+                                ?>
+                                <span class="badge badge-status-<?php echo $task['status']; ?>">
+                                    <?php echo $statusLabels[$task['status']] ?? $task['status']; ?>
+                                </span>
+                            </td>
+                            <td style="color: var(--text-muted);">
+                                <?php if ($task['status'] === 'done' && $task['duration']): ?>
+                                    <?php
+                                    $mins = $task['duration'];
+                                    if ($mins < 60) {
+                                        echo $mins . ' min';
+                                    } elseif ($mins < 1440) {
+                                        $hours = floor($mins / 60);
+                                        $remaining = $mins % 60;
+                                        echo $hours . 'h ' . ($remaining > 0 ? $remaining . 'min' : '');
+                                    } else {
+                                        $days = floor($mins / 1440);
+                                        $hours = floor(($mins % 1440) / 60);
+                                        echo $days . 'j ' . ($hours > 0 ? $hours . 'h' : '');
+                                    }
+                                    ?>
+                                <?php else: ?>
+                                    -
+                                <?php endif; ?>
+                            </td>
+                            <td style="color: var(--text-muted);">
+                                <?php echo htmlspecialchars($task['assigned_user'] ?? 'Non assigné'); ?>
+                            </td>
+                            <td style="color: var(--text-muted);"><?php echo $task['due_date'] ?? '-'; ?></td>
+                            <td>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <?php if ($task['status'] !== 'done'):
+                                        // Button styles based on current status
+                                        $btnStyles = [
+                                            'todo' => 'background: rgba(148,163,184,0.15); color: #94a3b8;',
+                                            'in_progress' => 'background: rgba(59,130,246,0.15); color: #60a5fa;',
+                                            'review' => 'background: rgba(139,92,246,0.15); color: #a78bfa;'
+                                        ];
+                                        $btnIcons = [
+                                            'todo' => 'fa-play',
+                                            'in_progress' => 'fa-eye',
+                                            'review' => 'fa-check'
+                                        ];
+                                        $btnTitles = [
+                                            'todo' => 'Démarrer (En cours)',
+                                            'in_progress' => 'Mettre en revue',
+                                            'review' => 'Terminer'
+                                        ];
+                                        $style = $btnStyles[$task['status']] ?? '';
+                                        $icon = $btnIcons[$task['status']] ?? 'fa-check';
+                                        $title = $btnTitles[$task['status']] ?? 'Avancer';
+                                        ?>
+                                        <button class="btn btn-sm"
+                                            style="<?php echo $style; ?> border: none; border-radius: 8px; padding: 0.5rem 0.75rem;"
+                                            onclick="advanceStatus(<?php echo $task['id']; ?>)" title="<?php echo $title; ?>">
+                                            <i class="fas <?php echo $icon; ?>"></i>
+                                        </button>
+                                    <?php endif; ?>
+                                    <?php if ($role === 'admin' && $task['status'] !== 'done'): ?>
+                                        <button class="btn btn-ghost btn-sm" onclick="openEditModal(<?php echo $task['id']; ?>)"
+                                            title="Modifier">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                    <?php endif; ?>
+                                    <button class="btn btn-ghost btn-sm" style="color: var(--info);"
+                                        onclick="openViewModal(<?php echo $task['id']; ?>)" title="Voir les détails">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <?php if ($role === 'admin'): ?>
+                                        <button class="btn btn-ghost btn-sm" style="color: var(--danger);"
+                                            onclick="deleteTask(<?php echo $task['id']; ?>, '<?php echo addslashes(htmlspecialchars($task['title'])); ?>')"
+                                            title="Supprimer">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    <?php endif; ?>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php else: ?>
+            <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
+                <i class="fas fa-inbox" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+                <p>Aucune tâche trouvée.</p>
+            </div>
+        <?php endif; ?>
 
-    <!-- Pagination -->
-    <?php if ($total_pages > 1): ?>
-        <div class="pagination" style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; padding: 1.5rem; border-top: 1px solid var(--border-color);">
-            <?php if ($page > 1): ?>
-                <a href="<?php echo $pageLink . ($page - 1); ?>&view=list" class="btn btn-sm btn-ghost"><i class="fas fa-chevron-left"></i> Précédent</a>
-            <?php endif; ?>
+        <!-- Pagination -->
+        <?php if ($total_pages > 1): ?>
+            <div class="pagination"
+                style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; padding: 1.5rem; border-top: 1px solid var(--border-color);">
+                <?php if ($page > 1): ?>
+                    <a href="<?php echo $pageLink . ($page - 1); ?>&view=list" class="btn btn-sm btn-ghost"><i
+                            class="fas fa-chevron-left"></i> Précédent</a>
+                <?php endif; ?>
 
-            <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                <a href="<?php echo $pageLink . $i; ?>&view=list" class="btn btn-sm <?php echo $i == $page ? 'btn-primary' : 'btn-ghost'; ?>">
-                    <?php echo $i; ?>
-                </a>
-            <?php endfor; ?>
+                <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                    <a href="<?php echo $pageLink . $i; ?>&view=list"
+                        class="btn btn-sm <?php echo $i == $page ? 'btn-primary' : 'btn-ghost'; ?>">
+                        <?php echo $i; ?>
+                    </a>
+                <?php endfor; ?>
 
-            <?php if ($page < $total_pages): ?>
-                <a href="<?php echo $pageLink . ($page + 1); ?>&view=list" class="btn btn-sm btn-ghost">Suivant <i class="fas fa-chevron-right"></i></a>
-            <?php endif; ?>
-        </div>
-    <?php endif; ?>
-</div>
+                <?php if ($page < $total_pages): ?>
+                    <a href="<?php echo $pageLink . ($page + 1); ?>&view=list" class="btn btn-sm btn-ghost">Suivant <i
+                            class="fas fa-chevron-right"></i></a>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+    </div>
 
 <?php else: ?>
-<!-- KANBAN VIEW -->
-<div class="kanban-board">
-    <!-- To Do Column -->
-    <div class="kanban-column" data-status="todo" ondrop="drop(event)" ondragover="allowDrop(event)">
-        <div class="kanban-column-header header-todo">
-            <h3>À Faire <span class="count"><?php echo count($kanbanData['todo']); ?></span></h3>
+    <!-- KANBAN VIEW -->
+    <div class="kanban-board">
+        <!-- To Do Column -->
+        <div class="kanban-column" data-status="todo" ondrop="drop(event)" ondragover="allowDrop(event)">
+            <div class="kanban-column-header header-todo">
+                <h3>À Faire <span class="count"><?php echo count($kanbanData['todo']); ?></span></h3>
+            </div>
+            <div class="kanban-tasks" id="col-todo">
+                <?php renderKanbanCards($kanbanData['todo']); ?>
+            </div>
         </div>
-        <div class="kanban-tasks" id="col-todo">
-            <?php renderKanbanCards($kanbanData['todo']); ?>
+
+        <!-- In Progress Column -->
+        <div class="kanban-column" data-status="in_progress" ondrop="drop(event)" ondragover="allowDrop(event)">
+            <div class="kanban-column-header header-progress">
+                <h3>En Cours <span class="count"><?php echo count($kanbanData['in_progress']); ?></span></h3>
+            </div>
+            <div class="kanban-tasks" id="col-in_progress">
+                <?php renderKanbanCards($kanbanData['in_progress']); ?>
+            </div>
+        </div>
+
+        <!-- Review Column -->
+        <div class="kanban-column" data-status="review" ondrop="drop(event)" ondragover="allowDrop(event)">
+            <div class="kanban-column-header header-review">
+                <h3>En Revue <span class="count"><?php echo count($kanbanData['review']); ?></span></h3>
+            </div>
+            <div class="kanban-tasks" id="col-review">
+                <?php renderKanbanCards($kanbanData['review']); ?>
+            </div>
+        </div>
+
+        <!-- Done Column -->
+        <div class="kanban-column" data-status="done" ondrop="drop(event)" ondragover="allowDrop(event)">
+            <div class="kanban-column-header header-done">
+                <h3>Terminé <span class="count"><?php echo count($kanbanData['done']); ?></span></h3>
+            </div>
+            <div class="kanban-tasks" id="col-done">
+                <?php renderKanbanCards($kanbanData['done']); ?>
+            </div>
         </div>
     </div>
 
-    <!-- In Progress Column -->
-    <div class="kanban-column" data-status="in_progress" ondrop="drop(event)" ondragover="allowDrop(event)">
-        <div class="kanban-column-header header-progress">
-            <h3>En Cours <span class="count"><?php echo count($kanbanData['in_progress']); ?></span></h3>
-        </div>
-        <div class="kanban-tasks" id="col-in_progress">
-            <?php renderKanbanCards($kanbanData['in_progress']); ?>
-        </div>
-    </div>
-
-    <!-- Review Column -->
-    <div class="kanban-column" data-status="review" ondrop="drop(event)" ondragover="allowDrop(event)">
-        <div class="kanban-column-header header-review">
-            <h3>En Revue <span class="count"><?php echo count($kanbanData['review']); ?></span></h3>
-        </div>
-        <div class="kanban-tasks" id="col-review">
-            <?php renderKanbanCards($kanbanData['review']); ?>
-        </div>
-    </div>
-
-    <!-- Done Column -->
-    <div class="kanban-column" data-status="done" ondrop="drop(event)" ondragover="allowDrop(event)">
-        <div class="kanban-column-header header-done">
-            <h3>Terminé <span class="count"><?php echo count($kanbanData['done']); ?></span></h3>
-        </div>
-        <div class="kanban-tasks" id="col-done">
-            <?php renderKanbanCards($kanbanData['done']); ?>
-        </div>
-    </div>
-</div>
-
-<!-- Include Kanban JS only in Kanban view -->
-<script src="../assets/js/kanban.js"></script>
+    <!-- Include Kanban JS only in Kanban view -->
+    <script src="../assets/js/kanban.js"></script>
 <?php endif; ?>
 
 <!-- Add Task Modal -->
@@ -847,9 +866,11 @@ include '../includes/header.php';
                     <label>Étiquettes</label>
                     <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
                         <?php foreach ($allTags as $tag): ?>
-                            <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; cursor: pointer; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 20px;">
+                            <label
+                                style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; cursor: pointer; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 20px;">
                                 <input type="checkbox" name="tags[]" value="<?php echo $tag['id']; ?>">
-                                <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: <?php echo htmlspecialchars($tag['color']); ?>;"></span>
+                                <span
+                                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: <?php echo htmlspecialchars($tag['color']); ?>;"></span>
                                 <?php echo htmlspecialchars($tag['name']); ?>
                             </label>
                         <?php endforeach; ?>
@@ -932,9 +953,12 @@ include '../includes/header.php';
                     <label>Étiquettes</label>
                     <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
                         <?php foreach ($allTags as $tag): ?>
-                            <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; cursor: pointer; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 20px;">
-                                <input type="checkbox" name="tags[]" value="<?php echo $tag['id']; ?>" class="edit-tag-checkbox">
-                                <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: <?php echo htmlspecialchars($tag['color']); ?>;"></span>
+                            <label
+                                style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; cursor: pointer; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 20px;">
+                                <input type="checkbox" name="tags[]" value="<?php echo $tag['id']; ?>"
+                                    class="edit-tag-checkbox">
+                                <span
+                                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: <?php echo htmlspecialchars($tag['color']); ?>;"></span>
                                 <?php echo htmlspecialchars($tag['name']); ?>
                             </label>
                         <?php endforeach; ?>
@@ -979,8 +1003,10 @@ include '../includes/header.php';
                 </div>
 
                 <div style="margin-top: 1rem;">
-                    <label style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Étiquettes</label>
-                    <div id="view_tags_container" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem;"></div>
+                    <label
+                        style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Étiquettes</label>
+                    <div id="view_tags_container" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem;">
+                    </div>
                 </div>
 
                 <div
@@ -1017,35 +1043,40 @@ include '../includes/header.php';
                     </div>
                 </div>
 
-                </div>
+            </div>
 
-                <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-                    <label style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 0.5rem;">Pièces jointes</label>
-                    <div id="view_attachments"></div>
-                </div>
+            <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                <label
+                    style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 0.5rem;">Pièces
+                    jointes</label>
+                <div id="view_attachments"></div>
+            </div>
 
-                <div class="modal-footer" style="border-top: none; padding-top: 1.5rem;">
-                    
-                    <!-- Comments Section -->
-                    <div style="width: 100%; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-                        <h4 style="font-size: 1rem; margin-bottom: 1rem; color: var(--text-main);">Commentaires</h4>
-                        
-                        <div id="view_comments_list" style="margin-bottom: 1rem; max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
-                            <!-- Comments injected by JS -->
-                        </div>
+            <div class="modal-footer" style="border-top: none; padding-top: 1.5rem;">
 
-                        <form id="addCommentForm" onsubmit="submitComment(event)" style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                            <input type="text" id="new_comment_text" class="form-control" placeholder="Ajouter un commentaire..." required style="flex: 1;">
-                            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-paper-plane"></i></button>
-                        </form>
+                <!-- Comments Section -->
+                <div style="width: 100%; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                    <h4 style="font-size: 1rem; margin-bottom: 1rem; color: var(--text-main);">Commentaires</h4>
+
+                    <div id="view_comments_list"
+                        style="margin-bottom: 1rem; max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
+                        <!-- Comments injected by JS -->
                     </div>
 
-                    <div style="width: 100%; display: flex; justify-content: flex-end; margin-top: 1rem;">
-                        <button type="button" class="btn btn-ghost" onclick="closeViewModal()">Fermer</button>
-                    </div>
+                    <form id="addCommentForm" onsubmit="submitComment(event)"
+                        style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                        <input type="text" id="new_comment_text" class="form-control"
+                            placeholder="Ajouter un commentaire..." required style="flex: 1;">
+                        <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-paper-plane"></i></button>
+                    </form>
+                </div>
+
+                <div style="width: 100%; display: flex; justify-content: flex-end; margin-top: 1rem;">
+                    <button type="button" class="btn btn-ghost" onclick="closeViewModal()">Fermer</button>
                 </div>
             </div>
         </div>
+    </div>
     </div>
 
 <?php endif; ?>
@@ -1054,44 +1085,40 @@ include '../includes/header.php';
 
 <!-- Helper Function for Kanban Cards -->
 <?php
-function renderKanbanCards($tasks) {
+function renderKanbanCards($tasks)
+{
     foreach ($tasks as $task) {
         $priorityClass = 'border-' . $task['priority'];
         ?>
-        <div class="kanban-card <?php echo $priorityClass; ?>" 
-             draggable="true" 
-             ondragstart="drag(event)" 
-             id="task-<?php echo $task['id']; ?>"
-             data-task-id="<?php echo $task['id']; ?>"
-        <div class="kanban-card <?php echo $priorityClass; ?>" 
-             draggable="true" 
-             ondragstart="drag(event)" 
-             id="task-<?php echo $task['id']; ?>"
-             data-task-id="<?php echo $task['id']; ?>"
-             onclick="openViewModal(<?php echo $task['id']; ?>)">
-            
+        <div class="kanban-card <?php echo $priorityClass; ?>" draggable="true" ondragstart="drag(event)"
+            id="task-<?php echo $task['id']; ?>" data-task-id="<?php echo $task['id']; ?>" <div
+            class="kanban-card <?php echo $priorityClass; ?>" draggable="true" ondragstart="drag(event)"
+            id="task-<?php echo $task['id']; ?>" data-task-id="<?php echo $task['id']; ?>"
+            onclick="openViewModal(<?php echo $task['id']; ?>)">
+
             <div class="kanban-card-header">
-                <span class="project-badge" style="background-color: <?php echo htmlspecialchars($task['project_color'] ?? '#ccc'); ?>">
+                <span class="project-badge"
+                    style="background-color: <?php echo htmlspecialchars($task['project_color'] ?? '#ccc'); ?>">
                     <?php echo htmlspecialchars($task['project_name'] ?? 'Projet'); ?>
                 </span>
                 <?php if ($task['priority'] === 'high'): ?>
                     <i class="fas fa-exclamation-circle text-danger" title="Priorité Haute"></i>
                 <?php endif; ?>
             </div>
-            
+
             <h4 class="kanban-card-title"><?php echo htmlspecialchars($task['title']); ?></h4>
-            
+
             <?php if (!empty($task['task_tags_info'])): ?>
                 <div class="kanban-tags">
-                <?php 
+                    <?php
                     $tags = explode('|', $task['task_tags_info']);
                     foreach ($tags as $tagStr):
                         list($tagName, $tagColor) = explode(':', $tagStr);
-                ?>
-                    <span class="badge" style="background-color: <?php echo htmlspecialchars($tagColor); ?>; font-size: 0.65rem;">
-                        <?php echo htmlspecialchars($tagName); ?>
-                    </span>
-                <?php endforeach; ?>
+                        ?>
+                        <span class="badge" style="background-color: <?php echo htmlspecialchars($tagColor); ?>; font-size: 0.65rem;">
+                            <?php echo htmlspecialchars($tagName); ?>
+                        </span>
+                    <?php endforeach; ?>
                 </div>
             <?php endif; ?>
 

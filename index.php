@@ -3,9 +3,9 @@
 require 'includes/functions.php';
 
 if (isLoggedIn()) {
-    header("Location: /taskly_v1/pages/dashboard.php");
+    header("Location: /Taskly/pages/dashboard.php");
 } else {
-    header("Location: /taskly_v1/auth/login.php");
+    header("Location: /Taskly/auth/login.php");
 }
 exit;
 ?>

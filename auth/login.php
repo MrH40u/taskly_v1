@@ -5,7 +5,7 @@ require '../includes/functions.php';
 require '../includes/csrf.php';
 
 if (isLoggedIn()) {
-    header("Location: /taskly_v1/pages/dashboard.php");
+    header("Location: /Taskly/pages/dashboard.php");
     exit;
 }
 
@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['user_role'] = $user['role'];
 
-                header("Location: /taskly_v1/pages/dashboard.php");
+                header("Location: /Taskly/pages/dashboard.php");
                 exit;
             } else {
                 $error = "Identifiants invalides.";
@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Connexion - Taskly</title>
-    <link rel="stylesheet" href="/taskly_v1/assets/style.css">
+    <link rel="stylesheet" href="/Taskly/assets/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form method="POST" action="">
             <?php echo csrfField(); ?>
-            
+
             <div class="form-group">
                 <label for="username">Nom d'utilisateur</label>
                 <input type="text" id="username" name="username" class="form-control"
