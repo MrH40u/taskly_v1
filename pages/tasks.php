@@ -2,6 +2,7 @@
 // pages/tasks.php
 require '../config/db.php';
 require '../includes/functions.php';
+require '../includes/csrf.php';
 
 requireLogin();
 
@@ -25,6 +26,12 @@ $defaultProjectId = $defaultProject ? $defaultProject['id'] : null;
 // Handle Add Task (AJAX)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_task') {
     header('Content-Type: application/json');
+
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
 
     if ($role !== 'admin') {
         echo json_encode(['success' => false, 'message' => 'Non autorisé']);
@@ -58,6 +65,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_status') {
     header('Content-Type: application/json');
 
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
+
     $task_id = $_POST['task_id'];
     $status = $_POST['status'];
 
@@ -81,6 +94,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'get_task') {
     header('Content-Type: application/json');
 
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
+
     $task_id = $_POST['task_id'];
     $stmt = $pdo->prepare("
         SELECT t.*, p.name as project_name, u.username as assigned_user 
@@ -103,6 +122,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 // Handle Update Task (AJAX) - for edit modal
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_task') {
     header('Content-Type: application/json');
+
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
 
     if ($role !== 'admin') {
         echo json_encode(['success' => false, 'message' => 'Non autorisé']);
@@ -148,6 +173,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_task') {
     header('Content-Type: application/json');
 
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
+
     if ($role !== 'admin') {
         echo json_encode(['success' => false, 'message' => 'Non autorisé']);
         exit;
@@ -168,6 +199,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 // Handle Advance Status (AJAX) - Cycles: todo -> in_progress -> review -> done
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'advance_status') {
     header('Content-Type: application/json');
+
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
 
     $task_id = $_POST['task_id'];
 
@@ -452,6 +489,7 @@ include '../includes/header.php';
                 <button class="modal-close" onclick="closeModal()">&times;</button>
             </div>
             <form id="addTaskForm">
+                <?php echo csrfField(); ?>
                 <input type="hidden" name="action" value="add_task">
 
                 <div class="form-group">
@@ -517,6 +555,7 @@ include '../includes/header.php';
                 <button class="modal-close" onclick="closeEditModal()">&times;</button>
             </div>
             <form id="editTaskForm">
+                <?php echo csrfField(); ?>
                 <input type="hidden" name="action" value="update_task">
                 <input type="hidden" name="task_id" id="edit_task_id">
 
@@ -635,6 +674,12 @@ include '../includes/header.php';
     </div>
 
     <script>
+        // Helper function to get CSRF token
+        function getCSRFToken() {
+            const tokenInput = document.querySelector('input[name="csrf_token"]');
+            return tokenInput ? tokenInput.value : '';
+        }
+
         function openModal() {
             document.getElementById('taskModal').classList.add('active');
         }
@@ -667,6 +712,7 @@ include '../includes/header.php';
             formData.append('action', 'update_status');
             formData.append('task_id', taskId);
             formData.append('status', status);
+            formData.append('csrf_token', getCSRFToken());
 
             fetch('tasks.php', {
                 method: 'POST',
@@ -691,6 +737,7 @@ include '../includes/header.php';
                 const formData = new FormData();
                 formData.append('action', 'delete_task');
                 formData.append('task_id', taskId);
+                formData.append('csrf_token', getCSRFToken());
 
                 fetch('tasks.php', {
                     method: 'POST',
@@ -711,6 +758,7 @@ include '../includes/header.php';
             const formData = new FormData();
             formData.append('action', 'advance_status');
             formData.append('task_id', taskId);
+            formData.append('csrf_token', getCSRFToken());
 
             fetch('tasks.php', {
                 method: 'POST',
@@ -731,6 +779,7 @@ include '../includes/header.php';
             const formData = new FormData();
             formData.append('action', 'get_task');
             formData.append('task_id', taskId);
+            formData.append('csrf_token', getCSRFToken());
 
             fetch('tasks.php', {
                 method: 'POST',
@@ -787,6 +836,7 @@ include '../includes/header.php';
             const formData = new FormData();
             formData.append('action', 'get_task');
             formData.append('task_id', taskId);
+            formData.append('csrf_token', getCSRFToken());
 
             fetch('tasks.php', {
                 method: 'POST',

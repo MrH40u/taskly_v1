@@ -2,6 +2,7 @@
 // pages/projects.php
 require '../config/db.php';
 require '../includes/functions.php';
+require '../includes/csrf.php';
 
 requireAdmin();
 
@@ -10,7 +11,10 @@ $success = '';
 
 // Handle Add Project
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    if ($_POST['action'] === 'add') {
+    // Valider le token CSRF
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        $error = "Token de sécurité invalide.";
+    } elseif ($_POST['action'] === 'add') {
         $name = cleanInput($_POST['name']);
         $description = cleanInput($_POST['description'] ?? '');
         $color = $_POST['color'] ?? '#6366f1';
@@ -73,6 +77,7 @@ include '../includes/header.php';
             <div class="alert alert-success"><?php echo $success; ?></div> <?php endif; ?>
 
         <form method="POST" action="">
+            <?php echo csrfField(); ?>
             <input type="hidden" name="action" value="add">
             <div class="form-group">
                 <label>Nom du projet *</label>
@@ -138,6 +143,7 @@ include '../includes/header.php';
                             <?php if ($p['name'] !== 'ASTREE'): ?>
                                 <form method="POST" style="display: inline;"
                                     onsubmit="return confirm('Supprimer ce projet ? Les tâches seront réassignées à ASTREE.');">
+                                    <?php echo csrfField(); ?>
                                     <input type="hidden" name="action" value="delete">
                                     <input type="hidden" name="project_id" value="<?php echo $p['id']; ?>">
                                     <button type="submit" class="btn btn-ghost btn-sm" style="color: var(--danger);">

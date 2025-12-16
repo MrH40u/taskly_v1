@@ -1,8 +1,5 @@
 <?php
 // includes/header.php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 $current_page = basename($_SERVER['PHP_SELF']);
 ?>
 <!DOCTYPE html>
@@ -12,7 +9,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Taskly - Gestion de Tâches</title>
-    <link rel="stylesheet" href="/Taskly/assets/style.css">
+    <link rel="stylesheet" href="/taskly_v1/assets/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -28,25 +25,25 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
         <nav class="sidebar-nav">
             <?php if (isset($_SESSION['user_id'])): ?>
-                <a href="/Taskly/pages/dashboard.php"
+                <a href="/taskly_v1/pages/dashboard.php"
                     class="nav-item <?php echo $current_page == 'dashboard.php' ? 'active' : ''; ?>">
                     <i class="fas fa-home"></i>
                     <span>Dashboard</span>
                 </a>
 
-                <a href="/Taskly/pages/tasks.php"
+                <a href="/taskly_v1/pages/tasks.php"
                     class="nav-item <?php echo $current_page == 'tasks.php' ? 'active' : ''; ?>">
                     <i class="fas fa-clipboard-list"></i>
                     <span>Gestion des Tâches</span>
                 </a>
 
                 <?php if ($_SESSION['user_role'] === 'admin'): ?>
-                    <a href="/Taskly/pages/projects.php"
+                    <a href="/taskly_v1/pages/projects.php"
                         class="nav-item <?php echo $current_page == 'projects.php' ? 'active' : ''; ?>">
                         <i class="fas fa-folder"></i>
                         <span>Projets</span>
                     </a>
-                    <a href="/Taskly/pages/users.php"
+                    <a href="/taskly_v1/pages/users.php"
                         class="nav-item <?php echo $current_page == 'users.php' ? 'active' : ''; ?>">
                         <i class="fas fa-users"></i>
                         <span>Utilisateurs</span>
@@ -114,7 +111,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     </div>
 
                     <!-- Logout Button -->
-                    <a href="/Taskly/auth/logout.php" class="btn-logout" title="Déconnexion">
+                    <a href="/taskly_v1/auth/logout.php" class="btn-logout" title="Déconnexion">
                         <i class="fas fa-sign-out-alt"></i>
                     </a>
                 <?php endif; ?>

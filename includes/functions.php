@@ -1,6 +1,10 @@
 <?php
 // includes/functions.php
-session_start();
+
+// Démarrer la session une seule fois
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 function isLoggedIn()
 {
@@ -15,7 +19,7 @@ function isAdmin()
 function requireLogin()
 {
     if (!isLoggedIn()) {
-        header("Location: /Taskly/auth/login.php");
+        header("Location: /taskly_v1/auth/login.php");
         exit;
     }
 }
