@@ -1,0 +1,107 @@
+﻿    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"
+        xmlns="http://www.w3.org/TR/REC-html40">
+
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <!--[if gte mso 9]>
+        <xml>
+            <x:ExcelWorkbook>
+                <x:ExcelWorksheets>
+                    <x:ExcelWorksheet>
+                        <x:Name>Tâches</x:Name>
+                        <x:WorksheetOptions>
+                            <x:DisplayGridlines/>
+                        </x:WorksheetOptions>
+                    </x:ExcelWorksheet>
+                </x:ExcelWorksheets>
+            </x:ExcelWorkbook>
+        </xml>
+        <![endif]-->
+        <style>
+            table {
+                border-collapse: collapse;
+                width: 100%;
+            }
+
+            th,
+            td {
+                border: 1px solid #000000;
+                padding: 5px;
+                text-align: left;
+                vertical-align: top;
+            }
+
+            th {
+                background-color: #6366F1;
+                color: #FFFFFF;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+
+    <body>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Titre</th>
+                    <th>Description</th>
+                    <th>Priorité</th>
+                    <th>Statut</th>
+                    <th>Assigné à</th>
+                    <th>Projet</th>
+                    <th>Date limite</th>
+                    <th>Date création</th>
+                </tr>
+            </thead>
+            <tbody>
+                                    <tr>
+                        <td>4</td>
+                        <td>test7</td>
+                        <td>test7</td>
+                        <td>Haute</td>
+                        <td>Terminé</td>
+                        <td>dev</td>
+                        <td>Referentiel</td>
+                        <td>2025-12-24</td>
+                        <td>2025-12-15 13:17:05</td>
+                    </tr>
+                                    <tr>
+                        <td>3</td>
+                        <td>test3</td>
+                        <td>test3</td>
+                        <td>Moyenne</td>
+                        <td>Terminé</td>
+                        <td>dev</td>
+                        <td>ASTREE</td>
+                        <td>2025-12-08</td>
+                        <td>2025-12-15 12:56:21</td>
+                    </tr>
+                                    <tr>
+                        <td>1</td>
+                        <td>test</td>
+                        <td>test</td>
+                        <td>Haute</td>
+                        <td>Terminé</td>
+                        <td>dev</td>
+                        <td>ASTREE</td>
+                        <td>2025-12-19</td>
+                        <td>2025-12-15 10:22:13</td>
+                    </tr>
+                                    <tr>
+                        <td>2</td>
+                        <td>test2</td>
+                        <td>test2</td>
+                        <td>Haute</td>
+                        <td>En revue</td>
+                        <td>Reddam</td>
+                        <td>ASTREE</td>
+                        <td>2025-12-18</td>
+                        <td>2025-12-15 07:15:56</td>
+                    </tr>
+                            </tbody>
+        </table>
+    </body>
+
+    </html>
+    

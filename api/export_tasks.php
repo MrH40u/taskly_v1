@@ -11,6 +11,28 @@ $role = $_SESSION['user_role'];
 // Get export parameters
 $format = $_POST['format'] ?? 'csv';
 $status_filter = $_POST['status'] ?? 'all';
+$project_filter = $_POST['project_id'] ?? 'all';
+$start_date = $_POST['start_date'] ?? '';
+$end_date = $_POST['end_date'] ?? '';
+$selected_columns = $_POST['columns'] ?? [];
+
+// Define available columns configuration
+$column_config = [
+    'id' => ['db' => 't.id', 'header' => 'ID'],
+    'title' => ['db' => 't.title', 'header' => 'Titre'],
+    'description' => ['db' => 't.description', 'header' => 'Description'],
+    'priority' => ['db' => 't.priority', 'header' => 'Priorité'],
+    'status' => ['db' => 't.status', 'header' => 'Statut'],
+    'assigned_user' => ['db' => 'u.username as assigned_user', 'key' => 'assigned_user', 'header' => 'Assigné à'],
+    'project_name' => ['db' => 'p.name as project_name', 'key' => 'project_name', 'header' => 'Projet'],
+    'due_date' => ['db' => 't.due_date', 'header' => 'Date limite'],
+    'created_at' => ['db' => 't.created_at', 'header' => 'Date création']
+];
+
+// If no columns selected, default to all
+if (empty($selected_columns)) {
+    $selected_columns = array_keys($column_config);
+}
 
 // Build query
 $params = [];
@@ -29,6 +51,21 @@ if ($role !== 'admin') {
 if ($status_filter !== 'all') {
     $sql .= " AND t.status = ?";
     $params[] = $status_filter;
+}
+
+if ($project_filter !== 'all') {
+    $sql .= " AND t.project_id = ?";
+    $params[] = $project_filter;
+}
+
+if (!empty($start_date)) {
+    $sql .= " AND DATE(t.created_at) >= ?";
+    $params[] = $start_date;
+}
+
+if (!empty($end_date)) {
+    $sql .= " AND DATE(t.created_at) <= ?";
+    $params[] = $end_date;
 }
 
 $sql .= " ORDER BY t.created_at DESC";
@@ -50,11 +87,23 @@ function translatePriority($priority)
     return $priorities[$priority] ?? $priority;
 }
 
+// Prepare headers and data keys based on selection
+$export_headers = [];
+$export_keys = [];
+
+foreach ($selected_columns as $col_id) {
+    if (isset($column_config[$col_id])) {
+        $export_headers[] = $column_config[$col_id]['header'];
+        // Use 'key' if defined (for aliases), otherwise use the ID
+        $export_keys[] = $column_config[$col_id]['key'] ?? $col_id;
+    }
+}
+
 // Generate filename
 $filename = 'taches_export_' . date('Y-m-d_His');
 
 if ($format === 'xlsx') {
-    // Native Excel Export (HTML Table method - widely supported by Excel)
+    // Native Excel Export (HTML Table method)
     $filename .= '.xls';
 
     header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
@@ -109,29 +158,33 @@ if ($format === 'xlsx') {
         <table>
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Titre</th>
-                    <th>Description</th>
-                    <th>Priorité</th>
-                    <th>Statut</th>
-                    <th>Assigné à</th>
-                    <th>Projet</th>
-                    <th>Date limite</th>
-                    <th>Date création</th>
+                    <?php foreach ($export_headers as $header): ?>
+                        <th><?php echo htmlspecialchars($header); ?></th>
+                    <?php endforeach; ?>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($tasks as $task): ?>
                     <tr>
-                        <td><?php echo $task['id']; ?></td>
-                        <td><?php echo htmlspecialchars($task['title']); ?></td>
-                        <td><?php echo htmlspecialchars($task['description']); ?></td>
-                        <td><?php echo translatePriority($task['priority']); ?></td>
-                        <td><?php echo translateStatus($task['status']); ?></td>
-                        <td><?php echo htmlspecialchars($task['assigned_user'] ?? 'Non assigné'); ?></td>
-                        <td><?php echo htmlspecialchars($task['project_name'] ?? ''); ?></td>
-                        <td><?php echo $task['due_date'] ?? '-'; ?></td>
-                        <td><?php echo $task['created_at']; ?></td>
+                        <?php foreach ($export_keys as $key): ?>
+                            <td>
+                                <?php
+                                $value = $task[$key] ?? '';
+
+                                // Apply translation/formatting
+                                if ($key === 'status')
+                                    $value = translateStatus($value);
+                                if ($key === 'priority')
+                                    $value = translatePriority($value);
+                                if ($key === 'due_date' || $key === 'project_name' || $key === 'assigned_user') {
+                                    if (empty($value))
+                                        $value = ($key === 'due_date' ? '-' : '');
+                                }
+
+                                echo htmlspecialchars($value);
+                                ?>
+                            </td>
+                        <?php endforeach; ?>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -155,21 +208,24 @@ if ($format === 'xlsx') {
     fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF)); // UTF-8 BOM
 
     // Header
-    fputcsv($output, ['ID', 'Titre', 'Description', 'Priorité', 'Statut', 'Assigné à', 'Projet', 'Date limite', 'Date création'], ';');
+    fputcsv($output, $export_headers, ';');
 
     // Rows
     foreach ($tasks as $task) {
-        fputcsv($output, [
-            $task['id'],
-            $task['title'],
-            $task['description'],
-            translatePriority($task['priority']),
-            translateStatus($task['status']),
-            $task['assigned_user'] ?? 'Non assigné',
-            $task['project_name'] ?? '',
-            $task['due_date'] ?? '-',
-            $task['created_at']
-        ], ';');
+        $row_data = [];
+        foreach ($export_keys as $key) {
+            $value = $task[$key] ?? '';
+
+            if ($key === 'status')
+                $value = translateStatus($value);
+            if ($key === 'priority')
+                $value = translatePriority($value);
+            if ($key === 'due_date' && empty($value))
+                $value = '-';
+
+            $row_data[] = $value;
+        }
+        fputcsv($output, $row_data, ';');
     }
 
     fclose($output);

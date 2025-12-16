@@ -40,10 +40,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <span>Gestion des Tâches</span>
                 </a>
 
-                <a href="/Taskly/pages/import_export.php"
-                    class="nav-item <?php echo $current_page == 'import_export.php' ? 'active' : ''; ?>">
-                    <i class="fas fa-file-export"></i>
-                    <span>Import | Export</span>
+                <a href="/Taskly/pages/gestion_fichiers.php"
+                    class="nav-item <?php echo $current_page == 'gestion_fichiers.php' ? 'active' : ''; ?>">
+                    <i class="fas fa-folder-open"></i>
+                    <span>Gestion des fichiers</span>
                 </a>
 
                 <?php if ($_SESSION['user_role'] === 'admin'): ?>
@@ -92,8 +92,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         case 'users.php':
                             echo 'Utilisateurs';
                             break;
-                        case 'import_export.php':
-                            echo 'Import | Export';
+                        case 'gestion_fichiers.php':
+                            echo 'Gestion des fichiers';
                             break;
                         default:
                             echo 'Taskly';
