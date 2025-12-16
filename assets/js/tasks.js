@@ -227,6 +227,7 @@ function openViewModal(taskId) {
                 const modal = document.getElementById('viewTaskModal');
 
                 if (modal) {
+                    modal.dataset.taskId = task.id; // Store task ID for comments
                     document.getElementById('view_title').textContent = task.title;
                     document.getElementById('view_description').textContent = task.description || 'Aucune description';
 
@@ -305,6 +306,34 @@ function openViewModal(taskId) {
                         }
                     }
 
+                    // Comments
+                    const commentsList = document.getElementById('view_comments_list');
+                    if (commentsList) {
+                        commentsList.innerHTML = '';
+                        if (task.comments && task.comments.length > 0) {
+                            task.comments.forEach(comment => {
+                                const div = document.createElement('div');
+                                div.style.padding = '0.75rem';
+                                div.style.backgroundColor = 'var(--bg-secondary)';
+                                div.style.borderRadius = '8px';
+                                div.style.border = '1px solid var(--border-color)';
+                                div.innerHTML = `
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+                                        <strong style="font-size: 0.85rem; color: var(--text-main);">${comment.username}</strong>
+                                        <small style="font-size: 0.75rem; color: var(--text-muted);">${new Date(comment.created_at).toLocaleString()}</small>
+                                    </div>
+                                    <p style="font-size: 0.9rem; color: var(--text-secondary); margin: 0; white-space: pre-wrap;">${comment.comment}</p>
+                                    <div style="text-align: right; margin-top: 0.25rem;">
+                                        <button class="btn btn-sm btn-ghost" onclick="deleteComment(${comment.id})" style="color: var(--danger); font-size: 0.75rem; padding: 0;">Supprimer</button>
+                                    </div>
+                                `;
+                                commentsList.appendChild(div);
+                            });
+                        } else {
+                            commentsList.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-style: italic;">Aucun commentaire.</p>';
+                        }
+                    }
+
                     modal.classList.add('active');
                 }
             } else {
@@ -324,4 +353,58 @@ if (viewTaskModal) {
     viewTaskModal.addEventListener('click', function (e) {
         if (e.target === this) closeViewModal();
     });
+}
+
+function submitComment(e) {
+    e.preventDefault();
+    const input = document.getElementById('new_comment_text');
+    const comment = input.value.trim();
+    const taskId = document.getElementById('viewTaskModal').dataset.taskId;
+
+    if (!comment) return;
+
+    const formData = new FormData();
+    formData.append('action', 'add_comment');
+    formData.append('task_id', taskId);
+    formData.append('comment', comment);
+    formData.append('csrf_token', getCSRFToken());
+
+    fetch('tasks.php', {
+        method: 'POST',
+        body: formData
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                input.value = '';
+                // Reload modal to show new comment
+                openViewModal(taskId);
+            } else {
+                showToast(data.message || 'Erreur', 'error');
+            }
+        });
+}
+
+function deleteComment(commentId) {
+    if (!confirm('Supprimer ce commentaire ?')) return;
+
+    const formData = new FormData();
+    formData.append('action', 'delete_comment');
+    formData.append('comment_id', commentId);
+    formData.append('csrf_token', getCSRFToken());
+
+    fetch('tasks.php', {
+        method: 'POST',
+        body: formData
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                // Reload modal
+                const taskId = document.getElementById('viewTaskModal').dataset.taskId;
+                openViewModal(taskId);
+            } else {
+                showToast(data.message || 'Erreur', 'error');
+            }
+        });
 }

@@ -2,35 +2,26 @@
 // pages/dashboard.php
 require '../config/db.php';
 require '../includes/functions.php';
+require '../includes/classes/TaskRepository.php';
 
 requireLogin();
 
 $user_id = $_SESSION['user_id'];
 $role = $_SESSION['user_role'];
 
-// Fetch stats
-$totalTasks = $pdo->query("SELECT COUNT(*) FROM tasks")->fetchColumn();
-$todoTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'todo'")->fetchColumn();
-$inProgressTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'in_progress'")->fetchColumn();
-$doneTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'done'")->fetchColumn();
+$repo = new TaskRepository($pdo);
 
-// Fetch tasks based on role
-if ($role === 'admin') {
-    $sql = "SELECT t.*, u.username as assigned_user 
-            FROM tasks t 
-            LEFT JOIN users u ON t.assigned_to = u.id 
-            ORDER BY t.created_at DESC LIMIT 10";
-    $stmt = $pdo->query($sql);
-} else {
-    $sql = "SELECT t.*, u.username as assigned_user 
-            FROM tasks t 
-            LEFT JOIN users u ON t.assigned_to = u.id 
-            WHERE t.assigned_to = ? 
-            ORDER BY t.created_at DESC LIMIT 10";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([$user_id]);
-}
-$tasks = $stmt->fetchAll();
+// Fetch stats
+$stats = $repo->getStats();
+$totalTasks = $stats['total'];
+$todoTasks = $stats['todo'];
+$inProgressTasks = $stats['in_progress'];
+$doneTasks = $stats['done'];
+
+// Fetch recent tasks (Top 10)
+$filters = ['role' => $role, 'user_id' => $user_id];
+$recentTasksData = $repo->getAllTasks($filters, 10, 0);
+$tasks = $recentTasksData['tasks'];
 
 
 // Include Chart.js

@@ -69,4 +69,3 @@ function getUnreadNotificationCount($pdo, $user_id)
     $stmt->execute([$user_id]);
     return (int)$stmt->fetchColumn();
 }
-?>

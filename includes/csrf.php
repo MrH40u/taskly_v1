@@ -49,4 +49,4 @@ function requireCSRFToken($errorMessage = "Token de sécurité invalide.")
     }
     return true;
 }
-?>
+

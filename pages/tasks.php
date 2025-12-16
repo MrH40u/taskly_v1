@@ -3,8 +3,11 @@
 require '../config/db.php';
 require '../includes/functions.php';
 require '../includes/csrf.php';
+require '../includes/classes/TaskRepository.php';
 
 requireLogin();
+
+$taskIdRepo = new TaskRepository($pdo);
 
 $user_id = $_SESSION['user_id'];
 $role = $_SESSION['user_role'];
@@ -54,35 +57,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 
     try {
-        $sql = "INSERT INTO tasks (title, description, priority, assigned_to, created_by, due_date, project_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$title, $description, $priority, $assigned_to, $user_id, $due_date, $project_id]);
-        $task_id = $pdo->lastInsertId();
+        $newTaskId = $taskIdRepo->createTask([
+            'title' => $title,
+            'description' => $description,
+            'project_id' => $project_id,
+            'assigned_to' => $assigned_to,
+            'priority' => $priority,
+            'due_date' => $due_date,
+            'created_by' => $user_id
+        ]);
 
         // Handle File Upload
         if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
             $uploadDir = '../uploads/';
             $fileName = basename($_FILES['attachment']['name']);
-            $targetPath = $uploadDir . time() . '_' . $fileName; // Unique name
+            $targetPath = $uploadDir . time() . '_' . $fileName; 
             
-            // Allow certain file types
             $allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'txt', 'zip'];
             $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
 
             if (in_array($fileExt, $allowedTypes)) {
                 if (move_uploaded_file($_FILES['attachment']['tmp_name'], $targetPath)) {
-                    $stmt = $pdo->prepare("INSERT INTO attachments (task_id, file_path, filename, uploaded_by) VALUES (?, ?, ?, ?)");
-                    $stmt->execute([$task_id, $targetPath, $fileName, $user_id]);
+                    $taskIdRepo->addAttachment($newTaskId, $targetPath, $fileName, $user_id);
                 }
             }
         }
-        
+
         // Handle Tags
         if (isset($_POST['tags']) && is_array($_POST['tags'])) {
-            $tagStmt = $pdo->prepare("INSERT INTO task_tags (task_id, tag_id) VALUES (?, ?)");
-            foreach ($_POST['tags'] as $tagId) {
-                $tagStmt->execute([$task_id, $tagId]);
-            }
+            $taskIdRepo->updateTags($newTaskId, $_POST['tags']);
         }
 
         // Notify Assignee
@@ -111,17 +114,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $status = $_POST['status'];
 
     // Check permission
-    $stmt = $pdo->prepare("SELECT assigned_to FROM tasks WHERE id = ?");
-    $stmt->execute([$task_id]);
-    $task = $stmt->fetch();
+    $task = $taskIdRepo->getTaskById($task_id);
 
     if (!$task || ($role !== 'admin' && $task['assigned_to'] != $user_id)) {
         echo json_encode(['success' => false, 'message' => 'Non autorisé']);
         exit;
     }
 
-    $stmt = $pdo->prepare("UPDATE tasks SET status = ? WHERE id = ?");
-    $stmt->execute([$status, $task_id]);
+    $taskIdRepo->updateStatus($task_id, $status);
     
     // Notify if Admin changed status for someone else
     if ($role === 'admin' && $task['assigned_to'] != $user_id) {
@@ -143,29 +143,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 
     $task_id = $_POST['task_id'];
-    $stmt = $pdo->prepare("
-        SELECT t.*, p.name as project_name, u.username as assigned_user 
-        FROM tasks t 
-        LEFT JOIN projects p ON t.project_id = p.id 
-        LEFT JOIN users u ON t.assigned_to = u.id 
-        WHERE t.id = ?
-    ");
-    $stmt->execute([$task_id]);
-    $task = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    // Fetch Attachments
-    if ($task) {
-        $stmt_att = $pdo->prepare("SELECT * FROM attachments WHERE task_id = ?");
-        $stmt_att->execute([$task_id]);
-        $task['attachments'] = $stmt_att->fetchAll(PDO::FETCH_ASSOC);
-
-        // Fetch Tags
-        $stmt_tags = $pdo->prepare("SELECT tag_id FROM task_tags WHERE task_id = ?");
-        $stmt_tags->execute([$task_id]);
-        $task['tags'] = $stmt_tags->fetchAll(PDO::FETCH_COLUMN); // Returns array of IDs
-    }
+    $task = $taskIdRepo->getTaskById($task_id);
 
     if ($task) {
+        // Fetch Comments
+        $task['comments'] = $taskIdRepo->getComments($task_id);
+
         echo json_encode(['success' => true, 'task' => $task]);
     } else {
         echo json_encode(['success' => false, 'message' => 'Tâche introuvable']);
@@ -191,9 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $task_id = $_POST['task_id'];
 
     // Check if task is completed
-    $stmt = $pdo->prepare("SELECT status FROM tasks WHERE id = ?");
-    $stmt->execute([$task_id]);
-    $task = $stmt->fetch();
+    $task = $taskIdRepo->getTaskById($task_id);
 
     if ($task && $task['status'] === 'done') {
         echo json_encode(['success' => false, 'message' => 'Tâche terminée, modification impossible']);
@@ -213,8 +194,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 
     try {
-        $sql = "UPDATE tasks SET title=?, description=?, priority=?, assigned_to=?, due_date=?, project_id=? WHERE id=?";
-        $stmt->execute([$title, $description, $priority, $assigned_to, $due_date, $project_id, $task_id]);
+        $taskIdRepo->updateTask($task_id, [
+            'title' => $title,
+            'description' => $description,
+            'priority' => $priority,
+            'assigned_to' => $assigned_to,
+            'due_date' => $due_date,
+            'project_id' => $project_id
+        ]);
         
         // Handle File Upload (Edit Mode)
         if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
@@ -227,21 +214,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
             if (in_array($fileExt, $allowedTypes)) {
                 if (move_uploaded_file($_FILES['attachment']['tmp_name'], $targetPath)) {
-                    $stmt = $pdo->prepare("INSERT INTO attachments (task_id, file_path, filename, uploaded_by) VALUES (?, ?, ?, ?)");
-                    $stmt->execute([$task_id, $targetPath, $fileName, $user_id]);
+                    $taskIdRepo->addAttachment($task_id, $targetPath, $fileName, $user_id);
                 }
             }
         }
 
-
-
-        // Handle Tags (Sync: Delete all then re-insert)
-        $pdo->prepare("DELETE FROM task_tags WHERE task_id = ?")->execute([$task_id]);
-        if (isset($_POST['tags']) && is_array($_POST['tags'])) {
-            $tagStmt = $pdo->prepare("INSERT INTO task_tags (task_id, tag_id) VALUES (?, ?)");
-            foreach ($_POST['tags'] as $tagId) {
-                $tagStmt->execute([$task_id, $tagId]);
-            }
+        // Handle Tags
+        if (isset($_POST['tags'])) {
+            $taskIdRepo->updateTags($task_id, $_POST['tags']);
         }
 
         // Notify Assignee (New or Old) - Simple approach: Notify the currently assigned person
@@ -274,8 +254,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $task_id = $_POST['task_id'];
 
     try {
-        $stmt = $pdo->prepare("DELETE FROM tasks WHERE id = ?");
-        $stmt->execute([$task_id]);
+        $taskIdRepo->deleteTask($task_id);
         echo json_encode(['success' => true, 'message' => 'Tâche supprimée']);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Erreur: ' . $e->getMessage()]);
@@ -296,10 +275,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $task_id = $_POST['task_id'];
 
     // Check permission
-    $stmt = $pdo->prepare("SELECT assigned_to, status, created_at FROM tasks WHERE id = ?");
-    $stmt->execute([$task_id]);
-    $task = $stmt->fetch();
+    $task = $taskIdRepo->getTaskById($task_id);
 
+    // Permission Check
     if (!$task || ($role !== 'admin' && $task['assigned_to'] != $user_id)) {
         echo json_encode(['success' => false, 'message' => 'Non autorisé']);
         exit;
@@ -321,24 +299,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $nextStatus = $statusFlow[$currentStatus] ?? 'done';
 
     try {
-        if ($nextStatus === 'done') {
-            // Final status: set completed_at and calculate duration
-            $sql = "UPDATE tasks SET 
-                        status = 'done', 
-                        completed_at = NOW(), 
-                        duration = TIMESTAMPDIFF(MINUTE, created_at, NOW()) 
-                    WHERE id = ?";
-        } else {
-            // Intermediate status: just update status
-            $sql = "UPDATE tasks SET status = ? WHERE id = ?";
-        }
-
-        $stmt = $pdo->prepare($sql);
-        if ($nextStatus === 'done') {
-            $stmt->execute([$task_id]);
-        } else {
-            $stmt->execute([$nextStatus, $task_id]);
-        }
+        $taskIdRepo->updateStatus($task_id, $nextStatus);
 
         $statusLabels = [
             'in_progress' => 'En cours',
@@ -357,12 +318,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit;
 }
 
+// Handle Add Comment (AJAX)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_comment') {
+    header('Content-Type: application/json');
+
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
+
+    $task_id = (int)$_POST['task_id'];
+    $comment = cleanInput($_POST['comment']);
+
+    if (empty($comment)) {
+        echo json_encode(['success' => false, 'message' => 'Le commentaire est vide']);
+        exit;
+    }
+
+    try {
+        $commentId = $taskIdRepo->addComment($task_id, $user_id, $comment);
+        
+        // Notify Assignee if someone else commented
+        $task = $taskIdRepo->getTaskById($task_id);
+        if ($task && $task['assigned_to'] != $user_id) {
+            createNotification($pdo, $task['assigned_to'], "Nouveau commentaire sur : " . $task['title'], "/taskly_v1/pages/tasks.php");
+        }
+
+        echo json_encode(['success' => true, 'message' => 'Commentaire ajouté']);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Erreur: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// Handle Delete Comment (AJAX)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_comment') {
+    header('Content-Type: application/json');
+
+    if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
+        echo json_encode(['success' => false, 'message' => 'Token de sécurité invalide']);
+        exit;
+    }
+
+    $comment_id = (int)$_POST['comment_id'];
+    $isAdmin = ($role === 'admin');
+
+    try {
+        if ($taskIdRepo->deleteComment($comment_id, $user_id, $isAdmin)) {
+            echo json_encode(['success' => true, 'message' => 'Commentaire supprimé']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Non autorisé']);
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Erreur: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
 // Fetch stats
-$totalTasks = $pdo->query("SELECT COUNT(*) FROM tasks")->fetchColumn();
-$todoTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'todo'")->fetchColumn();
-$inProgressTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'in_progress'")->fetchColumn();
-$reviewTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'review'")->fetchColumn();
-$doneTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'done'")->fetchColumn();
+$stats = $taskIdRepo->getStats();
+$totalTasks = $stats['total'];
+$todoTasks = $stats['todo'];
+$inProgressTasks = $stats['in_progress'];
+$reviewTasks = $stats['review'];
+$doneTasks = $stats['done'];
 
 // View Mode (List or Kanban)
 $view = cleanInput($_GET['view'] ?? 'list');
@@ -382,74 +401,20 @@ $filter_status = cleanInput($_GET['status'] ?? '');
 $filter_priority = cleanInput($_GET['priority'] ?? '');
 $filter_project = cleanInput($_GET['project_id'] ?? '');
 
-// Build Query Params and Where Clause
-$params = [];
-$whereClauses = [];
+// Map GET params to Repository Filters
+$filters = [
+    'user_id' => $user_id,
+    'role' => $role,
+    'search' => $search,
+    'status' => $filter_status,
+    'priority' => $filter_priority,
+    'project_id' => $filter_project
+];
 
-// Base Constraint (Role-based)
-if ($role !== 'admin') {
-    $whereClauses[] = "t.assigned_to = :current_user_id";
-    $params[':current_user_id'] = $user_id;
-}
-
-// Search Filter
-if (!empty($search)) {
-    $whereClauses[] = "(t.title LIKE :search OR t.description LIKE :search)";
-    $params[':search'] = "%$search%";
-}
-
-// Status Filter
-if (!empty($filter_status) && in_array($filter_status, ['todo', 'in_progress', 'review', 'done'])) {
-    $whereClauses[] = "t.status = :f_status";
-    $params[':f_status'] = $filter_status;
-}
-
-// Priority Filter
-if (!empty($filter_priority) && in_array($filter_priority, ['low', 'medium', 'high'])) {
-    $whereClauses[] = "t.priority = :f_priority";
-    $params[':f_priority'] = $filter_priority;
-}
-
-// Project Filter
-if (!empty($filter_project)) {
-    $whereClauses[] = "t.project_id = :f_project";
-    $params[':f_project'] = $filter_project;
-}
-
-// Construct SQL Parts
-$whereSQL = count($whereClauses) > 0 ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
-
-// 1. Count Total (For Pagination)
-$countSql = "SELECT COUNT(*) FROM tasks t $whereSQL";
-$countStmt = $pdo->prepare($countSql);
-foreach ($params as $key => $val) {
-    $countStmt->bindValue($key, $val);
-}
-$countStmt->execute();
-$total_rows = $countStmt->fetchColumn();
-
-// 2. Fetch Tasks
-$sql = "SELECT t.*, u.username as assigned_user, p.name as project_name, p.color as project_color,
-        (SELECT GROUP_CONCAT(tg.name, ':', tg.color SEPARATOR '|') 
-         FROM task_tags tt 
-         JOIN tags tg ON tt.tag_id = tg.id 
-         WHERE tt.task_id = t.id) as task_tags_info
-        FROM tasks t 
-        LEFT JOIN users u ON t.assigned_to = u.id 
-        LEFT JOIN projects p ON t.project_id = p.id
-        $whereSQL
-        ORDER BY t.created_at DESC
-        LIMIT :limit OFFSET :offset";
-
-$stmt = $pdo->prepare($sql);
-foreach ($params as $key => $val) {
-    $stmt->bindValue($key, $val);
-}
-$stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-$stmt->execute();
-$stmt->execute();
-$tasks = $stmt->fetchAll();
+// Fetch Data
+$taskData = $taskIdRepo->getAllTasks($filters, $limit, $offset);
+$tasks = $taskData['tasks'];
+$total_rows = $taskData['total'];
 $total_pages = ceil($total_rows / $limit);
 
 // Prepare Kanban Data if needed
@@ -1060,7 +1025,24 @@ include '../includes/header.php';
                 </div>
 
                 <div class="modal-footer" style="border-top: none; padding-top: 1.5rem;">
-                    <button type="button" class="btn btn-ghost" onclick="closeViewModal()">Fermer</button>
+                    
+                    <!-- Comments Section -->
+                    <div style="width: 100%; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                        <h4 style="font-size: 1rem; margin-bottom: 1rem; color: var(--text-main);">Commentaires</h4>
+                        
+                        <div id="view_comments_list" style="margin-bottom: 1rem; max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
+                            <!-- Comments injected by JS -->
+                        </div>
+
+                        <form id="addCommentForm" onsubmit="submitComment(event)" style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                            <input type="text" id="new_comment_text" class="form-control" placeholder="Ajouter un commentaire..." required style="flex: 1;">
+                            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-paper-plane"></i></button>
+                        </form>
+                    </div>
+
+                    <div style="width: 100%; display: flex; justify-content: flex-end; margin-top: 1rem;">
+                        <button type="button" class="btn btn-ghost" onclick="closeViewModal()">Fermer</button>
+                    </div>
                 </div>
             </div>
         </div>
